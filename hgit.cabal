@@ -1,0 +1,72 @@
+Name:               hgit
+Version:            0.0.1
+License:            BSD3
+License-File:       LICENSE
+Author:             Stefan Saasen
+Maintainer:         Stefan Saasen
+Copyright:          Stefan Saasen
+Synopsis:           Exploring git in Haskell
+Category:           Development
+Description:        Exploring git, the git transfer protocols and the object store in Haskell
+Homepage:           https://bitbucket.org/ssaasen/git-bottom-up
+Cabal-Version:      >= 1.6
+Build-Type:         Simple
+
+Source-Repository   head
+  Type:             git
+  Location:         git@bitbucket.org:ssaasen/git-bottom-up.git
+
+Flag                small_base
+  Description:      Choose the new, split-up base package.
+
+test-suite hgit-testsuite
+  type:                     exitcode-stdio-1.0
+  main-is:                  TestRunner.hs
+  hs-source-dirs:           tests/src, src
+  ghc-options:              -fhpc
+  other-modules:            Git.CommonTests, Git.Common
+  build-depends:            base < 5 && >= 3,
+                            test-framework >= 0.3.3,
+                            test-framework-quickcheck2 >= 0.2.9,
+                            test-framework-hunit,
+                            HUnit,
+                            QuickCheck >= 2.4.0.1,
+                            filepath >= 1.3,
+                            zlib >= 0.5,
+                            filepath >= 1.3,
+                            directory >= 1.1,
+                            cryptohash >= 0.8,
+                            iteratee >= 0.8,
+                            iteratee-compress >= 0.3,
+                            bytestring >= 0.9,
+                            attoparsec >= 0.10,
+                            text >= 0.11,
+                            network >= 2.3
+
+executable  hgit
+  main-is:          Main.hs
+  other-modules:    Git.TcpClient, Git.ObjectStore, Git.Packfile, Git.PackProtocol, Git.Common, Git.Remote, Git.Delta
+  build-depends:
+                    base < 5 && >= 3,
+                    filepath >= 1.3,
+                    binary-strict >= 0.4,
+                    zlib >= 0.5,
+                    filepath >= 1.3,
+                    directory >= 1.1,
+                    cryptohash >= 0.8,
+                    iteratee >= 0.8,
+                    iteratee-compress >= 0.3,
+                    bytestring >= 0.9,
+                    attoparsec >= 0.10,
+                    text >= 0.11,
+                    network >= 2.3
+  ghc-options:
+                    -Wall
+                    -rtsopts
+                    -fno-warn-unused-do-bind
+                    -O2
+                    -- -fno-warn-missing-signatures
+
+  hs-source-dirs:
+                    src
+
