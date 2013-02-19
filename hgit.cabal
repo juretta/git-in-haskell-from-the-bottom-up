@@ -24,7 +24,6 @@ test-suite hgit-testsuite
   main-is:                  TestRunner.hs
   hs-source-dirs:           tests/src, src
   ghc-options:              -fhpc
-  other-modules:            Git.CommonTests, Git.Common
   build-depends:            base < 5 && >= 3,
                             test-framework >= 0.3.3,
                             test-framework-quickcheck2 >= 0.2.9,
