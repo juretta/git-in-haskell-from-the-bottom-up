@@ -115,7 +115,7 @@ decodeDeltaHeader delta = do
 -- restore the target buffer
 runCommand :: Word8 -> B.ByteString -> B.ByteString -> t -> Get B.ByteString
 runCommand cmd acc source delta = do
-    toAdd <- if cmd .&. 0x80 /= 0 then
+    toAdd <- if isMsbSet cmd then
         copyCommand cmd source
     else
         insertCommand cmd
