@@ -73,10 +73,10 @@ resolveTree repo sha = do
 
 readHead :: GitRepository -> IO ObjectId
 readHead GitRepository{..}  = do
-    ref <- C.readFile (getGitDirectory </> ".git" </> "HEAD")
+    ref <- C.readFile (getGitDirectory </> "HEAD")
     -- TODO check if valid HEAD
     let unwrappedRef = C.unpack $ strip $ head $ tail $ C.split ':' ref
-    obj <- C.readFile (getGitDirectory </> ".git" </> unwrappedRef)
+    obj <- C.readFile (getGitDirectory </> unwrappedRef)
     return $ C.unpack $ strip obj
   where strip = C.takeWhile (not . isSpace) . C.dropWhile isSpace
 
@@ -150,7 +150,7 @@ createRef GitRepository{..} ref sha = do
     writeFile (dir </> name) (sha ++ "\n")
 
 pathForPack :: GitRepository -> FilePath
-pathForPack GitRepository{..} = getGitDirectory </> ".git" </> "objects" </> "pack"
+pathForPack GitRepository{..} = getGitDirectory </> "objects" </> "pack"
 
 pathForObject :: String -> String -> (FilePath, String)
 pathForObject repoName sha | length sha == 40 = (repoName </> ".git" </> "objects" </> pre, rest)
@@ -164,7 +164,7 @@ type Repository = String
 -- sha1 $ header ++ content
 readObject :: GitRepository -> ObjectId -> IO (Maybe Object)
 readObject GitRepository{..} sha = do
-    let (path, name) = pathForObject getGitDirectory sha
+    let (path, name) = pathForObject getName sha
         filename     = path </> name
     exists <- trace ("readObject: " ++ filename) $ doesFileExist filename
     if exists then do
