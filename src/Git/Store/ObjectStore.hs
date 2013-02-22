@@ -52,7 +52,7 @@ createGitRepositoryFromPackfile :: GitRepository -> FilePath -> IO ()
 createGitRepositoryFromPackfile target packFile = do
     pack <- packRead packFile
     let repoName = getName target
-        repo = GitRepository repoName (repoName </> ".git")
+        repo = GitRepository repoName
     unpackPackfile repo pack
     updateHead repo pack
 
@@ -72,11 +72,12 @@ resolveTree repo sha = do
 
 
 readHead :: GitRepository -> IO ObjectId
-readHead GitRepository{..}  = do
-    ref <- C.readFile (getGitDirectory </> "HEAD")
+readHead repo = do
+    let gitDir = getGitDirectory repo
+    ref <- C.readFile (gitDir </> "HEAD")
     -- TODO check if valid HEAD
     let unwrappedRef = C.unpack $ strip $ head $ tail $ C.split ':' ref
-    obj <- C.readFile (getGitDirectory </> unwrappedRef)
+    obj <- C.readFile (gitDir </> unwrappedRef)
     return $ C.unpack $ strip obj
   where strip = C.takeWhile (not . isSpace) . C.dropWhile isSpace
 
@@ -138,19 +139,19 @@ updateHead repo (Packfile _ _ objs) = do
 
 -- ref: refs/heads/master
 createSymRef :: GitRepository -> String -> String -> IO ()
-createSymRef GitRepository{..} symName ref =
-        writeFile (getGitDirectory </> symName) $ "ref: " ++ ref ++ "\n"
+createSymRef repo symName ref =
+        writeFile (getGitDirectory repo </> symName) $ "ref: " ++ ref ++ "\n"
 
 
 createRef :: GitRepository -> String -> String -> IO ()
-createRef GitRepository{..} ref sha = do
+createRef repo ref sha = do
     let (path, name) = splitFileName ref
-        dir          = getGitDirectory </> path
+        dir          = (getGitDirectory repo) </> path
     _ <- createDirectoryIfMissing True dir
     writeFile (dir </> name) (sha ++ "\n")
 
 pathForPack :: GitRepository -> FilePath
-pathForPack GitRepository{..} = getGitDirectory </> "objects" </> "pack"
+pathForPack repo = (getGitDirectory repo) </> "objects" </> "pack"
 
 pathForObject :: String -> String -> (FilePath, String)
 pathForObject repoName sha | length sha == 40 = (repoName </> ".git" </> "objects" </> pre, rest)
@@ -235,3 +236,7 @@ toObjectId _                    = Nothing
 
 toHex :: C.ByteString -> String
 toHex bytes = C.unpack bytes >>= printf "%02x"
+
+getGitDirectory :: GitRepository -> FilePath
+getGitDirectory = (</> ".git") . getName
+

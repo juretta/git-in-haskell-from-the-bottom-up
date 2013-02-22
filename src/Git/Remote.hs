@@ -76,7 +76,7 @@ clone :: String -> IO ()
 clone url =
     case parseRemote $ C.pack url of
         Just remote -> let gitRepoName = repositoryName remote
-                       in clone' (GitRepository gitRepoName (gitRepoName </> ".git")) remote
+                       in clone' (GitRepository gitRepoName) remote
         _           -> putStrLn $ "Invalid URL" ++ url
 
 

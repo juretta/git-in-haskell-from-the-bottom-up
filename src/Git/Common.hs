@@ -14,7 +14,6 @@ import Data.Bits        (Bits, (.&.))
 
 data GitRepository = GitRepository {
     getName         :: String
-   ,getGitDirectory :: FilePath
 } deriving (Show, Eq)
 
 -- | Return a hex representation of the given Integral.
