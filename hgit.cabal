@@ -44,7 +44,6 @@ test-suite hgit-testsuite
 
 executable  hgit
   main-is:          Main.hs
-  other-modules:    Git.TcpClient, Git.ObjectStore, Git.Packfile, Git.PackProtocol, Git.Common, Git.Remote, Git.Delta
   build-depends:
                     base < 5 && >= 3,
                     filepath >= 1.3,

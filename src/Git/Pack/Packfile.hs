@@ -1,9 +1,10 @@
 {-# LANGUAGE OverloadedStrings, DoAndIfThenElse #-}
 
-module Git.Packfile (
+module Git.Pack.Packfile (
     packRead
   , Packfile(..)
   , PackfileObject(..)
+  , PackObjectType(..)
 ) where
 
 
@@ -17,7 +18,7 @@ import Data.Maybe
 import Data.Char                        (ord)
 import Data.Word                        (Word8,Word32)
 import Data.Bits
-import Git.Common                       (isMsbSet, ObjectType(..))
+import Git.Common                       (isMsbSet)
 
 type Content = ByteString
 
@@ -32,10 +33,28 @@ data Packfile = Packfile {
     } | InvalidPackfile deriving (Show)
 
 data PackfileObject = PackfileObject {
-     objectType     :: ObjectType
+     objectType     :: PackObjectType
    , size           :: Int
    , objectData     :: Content
     } deriving (Show)
+
+-- From cache.h
+data PackObjectType =   OBJ_BAD | -- -1
+                        OBJ_NONE | -- 0
+                        OBJ_COMMIT | -- 1
+                        OBJ_TREE |  -- 2
+                        OBJ_BLOB | -- 3
+                        OBJ_TAG | -- 4
+                        OBJ_OFS_DELTA Int | -- 6 -- offset is interpreted as a negative offset from the type-byte of the header of the ofs-delta entry 
+                        OBJ_REF_DELTA [Word8] | 
+                        OBJ_ANY |
+                        OBJ_MAX deriving (Eq, Show, Ord) -- 7
+
+-- | Parse the given pack file into a "Packfile" representation
+packRead :: FilePath -> IO Packfile
+packRead = I.fileDriverRandom parsePackFileObjectHeader
+
+-- ============================================================================== --
 
 parsePackFileObjectHeader :: I.Iteratee ByteString IO Packfile
 parsePackFileObjectHeader = do
@@ -59,7 +78,7 @@ parsePackObject = do
     let objectType  = byte `shiftR` 4 .&. 7 -- shift right and masking the 4th least significtan bit
         initial     = fromIntegral $ byte .&. 15
     size <- if isMsbSet byte then parseObjectSize initial 0 else return initial
-    obj <- toObjectType objectType
+    obj <- toPackObjectType objectType
     content <- I.joinI $ enumInflate Zlib defaultDecompressParams I.stream2stream
     return $ (\t -> PackfileObject t size content) <$> obj
 
@@ -76,11 +95,6 @@ parseObjectSize size iter = do
     where coerce = toEnum . fromEnum
 
 
-packRead :: FilePath -> IO Packfile
-packRead = I.fileDriverRandom parsePackFileObjectHeader
-
-
-
 -- =================================================================================
 
 
@@ -89,19 +103,19 @@ fromOctets = foldl accum 0
   where
     accum a o = (a `shiftL` 8) .|. fromIntegral o
 
--- Map the internal representation of the object type to the ObjectType
-toObjectType :: (Show a, Integral a) => a -> I.Iteratee ByteString IO (Maybe ObjectType)
-toObjectType 1  = return $ Just Commit
-toObjectType 2  = return $ Just Tree
-toObjectType 3  = return $ Just Blob
-toObjectType 4  = return $ Just Tag
-toObjectType 6  = do
+-- Map the internal representation of the object type to the PackObjectType
+toPackObjectType :: (Show a, Integral a) => a -> I.Iteratee ByteString IO (Maybe PackObjectType)
+toPackObjectType 1  = return $ Just OBJ_COMMIT
+toPackObjectType 2  = return $ Just OBJ_TREE
+toPackObjectType 3  = return $ Just OBJ_BLOB
+toPackObjectType 4  = return $ Just OBJ_TAG
+toPackObjectType 6  = do
     offset <- readOffset 0 0
-    return $ Just (OfsDelta offset)
-toObjectType 7  = do 
+    return $ Just (OBJ_OFS_DELTA offset)
+toPackObjectType 7  = do 
     baseObj <- replicateM 20 I.head -- 20-byte base object name SHA1
-    return $ Just (RefDelta baseObj)
-toObjectType _  = return Nothing
+    return $ Just (OBJ_REF_DELTA baseObj)
+toPackObjectType _  = return Nothing
 
 
 -- offset encoding:

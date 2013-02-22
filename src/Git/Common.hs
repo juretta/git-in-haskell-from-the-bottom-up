@@ -6,20 +6,11 @@ module Git.Common (
   , isMsbSet
   , eitherToMaybe
   , GitRepository(..)
-  , ObjectType(..)
 ) where
 
 import Text.Printf      (printf)
 import Numeric          (showHex)
 import Data.Bits        (Bits, (.&.))
-import Data.Word        (Word8)
-
-data ObjectType = Commit | -- 1
-        Tree |  -- 2
-        Blob | -- 3
-        Tag | -- 4
-        OfsDelta Int | -- 6 -- offset is interpreted as a negative offset from the type-byte of the header of the ofs-delta entry 
-        RefDelta [Word8] deriving (Eq, Show, Ord) -- 7
 
 data GitRepository = GitRepository {
     getName         :: String

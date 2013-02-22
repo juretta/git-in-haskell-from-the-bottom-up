@@ -19,10 +19,10 @@ import System.FilePath                          ((</>), takeFileName, dropExtens
 import Network.Socket                           (withSocketsDo)
 import Data.Maybe
 import Data.List
+import Git.Common
 import Git.TcpClient
 import Git.PackProtocol
-import Git.Common
-import Git.ObjectStore
+import Git.Store.ObjectStore
 
 refDiscovery :: String -> String -> String
 refDiscovery host repo = pktLine $ "git-upload-pack /" ++ repo ++ "\0host="++host++"\0" -- ++ flushPkt -- Tell the server to disconnect

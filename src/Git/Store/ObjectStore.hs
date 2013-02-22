@@ -1,15 +1,19 @@
 {-# LANGUAGE OverloadedStrings, RecordWildCards, DoAndIfThenElse #-}
 
-module Git.ObjectStore (
+module Git.Store.ObjectStore (
     createEmptyGitRepository
   , encodeObject
   , pathForObject
   , pathForPack
   , createGitRepositoryFromPackfile
   , updateHead
+  --  PRIVATE
+  , checkoutHead
+  , readHead
+  , resolveTree
 ) where
 
-import qualified Data.ByteString.Char8 as BC
+import qualified Data.ByteString.Char8 as C
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as L
 import qualified Codec.Compression.Zlib as Z
@@ -19,22 +23,27 @@ import Control.Applicative ((<|>))
 -- FIXME -> don't use isJust/fromJust
 import Data.Maybe                                           (isJust, fromJust)
 import Text.Printf                                          (printf)
-import Git.Packfile
-import Git.Delta                                            (patch)
-import Git.Common                                           (GitRepository(..), ObjectType(..), eitherToMaybe)
+import Git.Pack.Packfile
+import Git.Pack.Delta                                       (patch)
+import Git.Common                                           (GitRepository(..), eitherToMaybe)
+-- Tree
+import Git.Store.Blob
 import System.FilePath
 import System.Directory
 import Control.Monad                                        (unless, liftM)
+import Data.Char                                            (isSpace)
+import Debug.Trace
 
 type ObjectId = String
 
+
 data Object = ResolvedObject {
-    getObjectType   :: ObjectType
+    getObjectType   :: PackObjectType
   , getContent      :: B.ByteString
   , getSize         :: Int
   , sha1            :: String
 } | UnresolvedObject {
-    getObjectType   :: ObjectType
+    getObjectType   :: PackObjectType
   , deltaData       :: B.ByteString
   , getSize         :: Int
 }deriving (Show, Eq, Ord)
@@ -46,6 +55,31 @@ createGitRepositoryFromPackfile target packFile = do
         repo = GitRepository repoName (repoName </> ".git")
     unpackPackfile repo pack
     updateHead repo pack
+
+-- | Updates files in the working tree to match the given <tree-ish>
+--
+--
+--
+checkoutHead :: GitRepository -> IO ()
+checkoutHead repo = error "repo"
+
+-- | Resolve a tree given a <tree-ish>
+-- Similar to `parse_tree_indirect` defined in tree.c
+resolveTree :: GitRepository -> ObjectId -> IO String
+resolveTree repo sha = do
+        obj <- readObject repo sha
+        return $ show obj
+
+
+readHead :: GitRepository -> IO ObjectId
+readHead GitRepository{..}  = do
+    ref <- C.readFile (getGitDirectory </> ".git" </> "HEAD")
+    -- TODO check if valid HEAD
+    let unwrappedRef = C.unpack $ strip $ head $ tail $ C.split ':' ref
+    obj <- C.readFile (getGitDirectory </> ".git" </> unwrappedRef)
+    return $ C.unpack $ strip obj
+  where strip = C.takeWhile (not . isSpace) . C.dropWhile isSpace
+
 
 -- TODO properly handle the error condition here
 unpackPackfile :: GitRepository -> Packfile -> IO ()
@@ -70,7 +104,7 @@ writeDeltas repo (x:xs) = do
 writeDeltas _ [] = return ()
 
 writeDelta :: GitRepository -> Object -> IO (Maybe FilePath)
-writeDelta repo (UnresolvedObject ty@(RefDelta baseObject) content size) = do
+writeDelta repo (UnresolvedObject ty@(OBJ_REF_DELTA baseObject) content size) = do
         base <- case toObjectId ty of
             Just sha -> readObject repo sha
             _        -> return Nothing
@@ -81,8 +115,8 @@ writeDelta repo (UnresolvedObject ty@(RefDelta baseObject) content size) = do
                                     (path, name) = pathForObject (getName repo) (sha1 base')
                                     filename     = path </> name
                                     header       = headerForBlob (objectTypeToString $ getObjectType base') target
-                                    blob         = header `BC.append` target
-                                    obj          = ResolvedObject (getObjectType base') blob (BC.length target) $ hsh blob
+                                    blob         = header `C.append` target
+                                    obj          = ResolvedObject (getObjectType base') blob (C.length target) $ hsh blob
                                 _ <- writeObject repo obj
                                 return $ Just filename
                 Left msg     -> return Nothing
@@ -100,7 +134,7 @@ updateHead repo (Packfile _ _ objs) = do
                 let obj = encodeObject commit
                 createRef repo ref (sha1 obj)
                 createSymRef repo "HEAD" ref
-    where isCommit ob = objectType ob == Commit
+    where isCommit ob = objectType ob == OBJ_COMMIT
 
 -- ref: refs/heads/master
 createSymRef :: GitRepository -> String -> String -> IO ()
@@ -130,11 +164,11 @@ type Repository = String
 -- sha1 $ header ++ content
 readObject :: GitRepository -> ObjectId -> IO (Maybe Object)
 readObject GitRepository{..} sha = do
-    let (path, name) = pathForObject getName sha
+    let (path, name) = pathForObject getGitDirectory sha
         filename     = path </> name
-    exists <- doesFileExist filename
+    exists <- trace ("readObject: " ++ filename) $ doesFileExist filename
     if exists then do
-        bs <- BC.readFile filename
+        bs <- C.readFile filename
         return $ parseBlob $ inflate bs
     else return Nothing
     where parseBlob blob = eitherToMaybe $ AC.parseOnly (blobParser sha) blob
@@ -149,11 +183,11 @@ blobParser sha1 = do
    size <- AC.takeWhile AC.isDigit
    AC.char '\0'
    blob <- AC.takeByteString
-   return $ ResolvedObject (obj objType) blob (read $ BC.unpack size) sha1
-   where obj "commit"   = Commit
-         obj "tree"     = Tree
-         obj "blob"     = Blob
-         obj "tag"      = Tag
+   return $ ResolvedObject (obj objType) blob (read $ C.unpack size) sha1
+   where obj "commit"   = OBJ_COMMIT
+         obj "tree"     = OBJ_TREE
+         obj "blob"     = OBJ_BLOB
+         obj "tag"      = OBJ_TAG
 
 
 
@@ -171,36 +205,33 @@ writeObject GitRepository{..} obj = do
 hsh :: B.ByteString -> String
 hsh = toHex . SHA1.hash
 
-objectTypeToString :: ObjectType -> B.ByteString
-objectTypeToString Commit = "commit"
-objectTypeToString Tree   = "tree"
-objectTypeToString Blob   = "blob"
-objectTypeToString Tag    = "tag"
+objectTypeToString :: PackObjectType -> B.ByteString
+objectTypeToString OBJ_COMMIT = "commit"
+objectTypeToString OBJ_TREE   = "tree"
+objectTypeToString OBJ_BLOB   = "blob"
+objectTypeToString OBJ_TAG    = "tag"
 
 encodeObject :: PackfileObject -> Object
-encodeObject obj@(PackfileObject ot@(RefDelta _) size content) = UnresolvedObject ot content size
+encodeObject obj@(PackfileObject ot@(OBJ_REF_DELTA _) size content) = UnresolvedObject ot content size
 encodeObject obj@(PackfileObject ot size _) =
         ResolvedObject ot blob size (hsh blob)
     where header obj' =
             let blobType = objType obj'
             in  headerForBlob blobType $ objectData obj'
-          blob                                   = header obj `BC.append` objectData obj
-          objType (PackfileObject Commit _ _)    = "commit"
-          objType (PackfileObject Blob _ _)      = "blob"
-          objType (PackfileObject Tree _ _)      = "tree"
-          objType (PackfileObject Tag _ _)       = "tag"
+          blob                              = header obj `C.append` objectData obj
+          objType (PackfileObject t _ _)    = objectTypeToString t
 
 headerForBlob :: B.ByteString -> B.ByteString -> B.ByteString
-headerForBlob objType content = objType `BC.append` " " `BC.append` BC.pack (show $ BC.length content) `BC.append` "\0"
+headerForBlob objType content = objType `C.append` " " `C.append` C.pack (show $ C.length content) `C.append` "\0"
 
 createEmptyGitRepository :: FilePath -> IO ()
 createEmptyGitRepository gitDir =
         mapM_ (\dir -> createDirectoryIfMissing True (gitDir </> dir)) topLevelDirectories
         where topLevelDirectories = ["objects", "refs", "hooks", "info"]
 
-toObjectId :: ObjectType -> Maybe ObjectId
-toObjectId (RefDelta base) = Just $ toHex $ B.pack base
-toObjectId _               = Nothing
+toObjectId :: PackObjectType -> Maybe ObjectId
+toObjectId (OBJ_REF_DELTA base) = Just $ toHex $ B.pack base
+toObjectId _                    = Nothing
 
-toHex :: BC.ByteString -> String
-toHex bytes = BC.unpack bytes >>= printf "%02x"
+toHex :: C.ByteString -> String
+toHex bytes = C.unpack bytes >>= printf "%02x"

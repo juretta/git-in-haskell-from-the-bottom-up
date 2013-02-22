@@ -27,7 +27,7 @@
 --
 -- The delta file @out.delta@ can be used to restore the content of the
 -- @test-delta-new.c@ file based on the source file @test-delta-old.c@.
-module Git.Delta (
+module Git.Pack.Delta (
     patch
 ) where
 

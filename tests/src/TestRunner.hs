@@ -2,6 +2,7 @@ module Main where
 
 import qualified Git.CommonTests
 import qualified Git.RemoteTests
+import qualified Git.Store.BlobTest
 import Test.Framework
 
 main ::
@@ -15,8 +16,9 @@ tests =
   [
     testGroup "Tests"
       [
-         Git.CommonTests.test
-        ,Git.RemoteTests.test
+          Git.CommonTests.test
+        , Git.RemoteTests.test
+        , Git.Store.BlobTest.test
       ]
   ]
 
