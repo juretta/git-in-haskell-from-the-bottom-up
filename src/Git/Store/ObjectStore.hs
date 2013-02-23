@@ -28,6 +28,7 @@ import Git.Store.Blob
 import System.FilePath
 import System.Directory
 import Control.Monad                                        (unless, liftM)
+import Data.Foldable                                        (forM_)
 import Debug.Trace
 
 createGitRepositoryFromPackfile :: GitRepository -> FilePath -> IO ()
@@ -44,39 +45,33 @@ unpackPackfile :: GitRepository -> Packfile -> IO ()
 unpackPackfile _ InvalidPackfile = error "Attempting to unpack an invalid packfile"
 unpackPackfile repo@GitRepository{..} (Packfile _ _ objs) = do
         unresolvedObjects <- writeObjects objs
-        _ <- writeDeltas repo unresolvedObjects
+        forM_ unresolvedObjects writeDelta
         putStrLn "Done"
     where   writeObjects (x@(PackfileObject (OBJ_REF_DELTA _) _ _):xs) = liftM (x:) (writeObjects xs)
             writeObjects ((PackfileObject objType _ content) :xs) = do
                 _ <- writeBlob repo (tt objType) content
                 writeObjects xs
             writeObjects []     = return []
+
             tt OBJ_COMMIT       = BCommit
             tt OBJ_TREE         = BTree
             tt OBJ_BLOB         = BBlob
             tt OBJ_TAG          = BTag
             tt _                = error "Unexpected blob type"
 
-writeDeltas :: GitRepository -> [PackfileObject] -> IO ()
-writeDeltas repo (x:xs) = do
-    _ <- writeDelta repo x
-    writeDeltas repo xs
-writeDeltas _ [] = return ()
-
-writeDelta :: GitRepository -> PackfileObject -> IO (Maybe FilePath)
-writeDelta repo (PackfileObject ty@(OBJ_REF_DELTA _) _ content) = do
-        base <- case toObjectId ty of
-            Just sha -> readBlob repo sha
-            _        -> return Nothing
-        if isJust base then
-            case patch (getBlobContent $ fromJust base) content of
-                Right target -> do
-                                let base'        = fromJust base
-                                filename <- writeBlob repo (objType base') target
-                                return $ Just filename
-                Left _       -> return Nothing
-        else return Nothing -- FIXME - base object doesn't exist yet
-writeDelta _ _ = error "Don't expect a resolved object here"
+            writeDelta (PackfileObject ty@(OBJ_REF_DELTA _) _ content) = do
+                    base <- case toObjectId ty of
+                        Just sha -> readBlob repo sha
+                        _        -> return Nothing
+                    if isJust base then
+                        case patch (getBlobContent $ fromJust base) content of
+                            Right target -> do
+                                            let base'        = fromJust base
+                                            filename <- writeBlob repo (objType base') target
+                                            return $ Just filename
+                            Left _       -> return Nothing
+                    else return Nothing -- FIXME - base object doesn't exist yet
+            writeDelta _ = error "Don't expect a resolved object here"
 
 
 updateHead :: GitRepository -> Packfile -> IO ()
