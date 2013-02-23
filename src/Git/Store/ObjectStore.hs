@@ -7,10 +7,10 @@ module Git.Store.ObjectStore (
   , pathForPack
   , createGitRepositoryFromPackfile
   , updateHead
-  --  PRIVATE
-  , checkoutHead
-  , readHead
-  , resolveTree
+  -- ?
+  , readObject
+  , createRef
+  , getGitDirectory
 ) where
 
 import qualified Data.ByteString.Char8 as C
@@ -55,31 +55,6 @@ createGitRepositoryFromPackfile target packFile = do
         repo = GitRepository repoName
     unpackPackfile repo pack
     updateHead repo pack
-
--- | Updates files in the working tree to match the given <tree-ish>
---
---
---
-checkoutHead :: GitRepository -> IO ()
-checkoutHead repo = error "repo"
-
--- | Resolve a tree given a <tree-ish>
--- Similar to `parse_tree_indirect` defined in tree.c
-resolveTree :: GitRepository -> ObjectId -> IO String
-resolveTree repo sha = do
-        obj <- readObject repo sha
-        return $ show obj
-
-
-readHead :: GitRepository -> IO ObjectId
-readHead repo = do
-    let gitDir = getGitDirectory repo
-    ref <- C.readFile (gitDir </> "HEAD")
-    -- TODO check if valid HEAD
-    let unwrappedRef = C.unpack $ strip $ head $ tail $ C.split ':' ref
-    obj <- C.readFile (gitDir </> unwrappedRef)
-    return $ C.unpack $ strip obj
-  where strip = C.takeWhile (not . isSpace) . C.dropWhile isSpace
 
 
 -- TODO properly handle the error condition here
