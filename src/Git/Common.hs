@@ -6,11 +6,14 @@ module Git.Common (
   , isMsbSet
   , eitherToMaybe
   , GitRepository(..)
+  , ObjectId
 ) where
 
 import Text.Printf      (printf)
 import Numeric          (showHex)
 import Data.Bits        (Bits, (.&.))
+
+type ObjectId = String
 
 data GitRepository = GitRepository {
     getName         :: String

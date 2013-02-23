@@ -28,8 +28,6 @@ import Control.Monad                                        (unless, liftM)
 import Data.Char                                            (isSpace)
 import Debug.Trace
 
-type ObjectId = String
-
 -- | Updates files in the working tree to match the given <tree-ish>
 --
 --

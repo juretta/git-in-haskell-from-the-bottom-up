@@ -20,8 +20,8 @@ import Control.Applicative ((<|>))
 import Data.Maybe                                           (isJust, fromJust)
 import Text.Printf                                          (printf)
 import Git.Pack.Packfile
-import Git.Pack.Delta                                      (patch)
-import Git.Common                                           (eitherToMaybe)
+import Git.Pack.Delta                                       (patch)
+import Git.Common                                           (eitherToMaybe, ObjectId)
 import System.FilePath
 import System.Directory
 import Control.Monad                                        (unless, liftM)
@@ -34,7 +34,6 @@ data Person = Person {
 -}
 
 
-type ObjectId = String
 {-
 data TreeNode = TreeNode {
     obj  :: GitObject

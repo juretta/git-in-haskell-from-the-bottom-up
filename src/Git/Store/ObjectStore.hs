@@ -25,7 +25,7 @@ import Data.Maybe                                           (isJust, fromJust)
 import Text.Printf                                          (printf)
 import Git.Pack.Packfile
 import Git.Pack.Delta                                       (patch)
-import Git.Common                                           (GitRepository(..), eitherToMaybe)
+import Git.Common                                           (GitRepository(..), eitherToMaybe, ObjectId)
 -- Tree
 import Git.Store.Blob
 import System.FilePath
@@ -33,8 +33,6 @@ import System.Directory
 import Control.Monad                                        (unless, liftM)
 import Data.Char                                            (isSpace)
 import Debug.Trace
-
-type ObjectId = String
 
 
 data Object = ResolvedObject {
