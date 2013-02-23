@@ -83,7 +83,7 @@ blobParser sha1 = do
    char '\0'
    blob <- takeByteString
    return $ Blob blob (obj objType) sha1
-   where obj "commit"   = BBlob
+   where obj "commit"   = BCommit
          obj "tree"     = BTree
          obj "tag"      = BTag
          obj "blob"     = BBlob
