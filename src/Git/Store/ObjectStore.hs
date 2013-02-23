@@ -7,7 +7,7 @@ module Git.Store.ObjectStore (
   , createGitRepositoryFromPackfile
   , updateHead
   -- ?
-  , readObject
+  , readBlob
   , createRef
   , getGitDirectory
 ) where
@@ -66,7 +66,7 @@ writeDeltas _ [] = return ()
 writeDelta :: GitRepository -> PackfileObject -> IO (Maybe FilePath)
 writeDelta repo (PackfileObject ty@(OBJ_REF_DELTA _) _ content) = do
         base <- case toObjectId ty of
-            Just sha -> readObject repo sha
+            Just sha -> readBlob repo sha
             _        -> return Nothing
         if isJust base then
             case patch (getBlobContent $ fromJust base) content of
@@ -117,11 +117,11 @@ pathForObject _ _ = ("", "")
 
 -- header: "type size\0"
 -- sha1 $ header ++ content
-readObject :: GitRepository -> ObjectId -> IO (Maybe Blob)
-readObject GitRepository{..} sha = do
+readBlob :: GitRepository -> ObjectId -> IO (Maybe Blob)
+readBlob GitRepository{..} sha = do
     let (path, name) = pathForObject getName sha
         filename     = path </> name
-    exists <- trace ("readObject: " ++ filename) $ doesFileExist filename
+    exists <- trace ("readBlob: " ++ filename) $ doesFileExist filename
     if exists then do
         bs <- C.readFile filename
         return $ parseBlob sha $ inflate bs

@@ -5,9 +5,12 @@ module Git.Store.Blob (
   , parseCommit
   , parsePerson     -- Remove?
   , parseBlob
+  , toCommit
+  , extractTree
   , Commit(..)
   , Blob(..)
   , BlobType(..)
+  , Tree(..)
 ) where
 
 import Prelude hiding (take, takeWhile)
@@ -16,6 +19,7 @@ import qualified Data.ByteString as B
 import Data.Attoparsec.ByteString.Char8
 import Control.Applicative ((<|>))
 import Git.Common                                           (eitherToMaybe, ObjectId)
+import Debug.Trace
 {-
 data Person = Person {
     getPersonName     :: B.ByteString
@@ -49,7 +53,7 @@ data Blob = Blob {
     getBlobContent  :: B.ByteString
   , objType         :: BlobType
   , sha             :: ObjectId
-}
+} deriving (Eq, Show)
 
 --data Blob = BlobCommit Commit | BlobTree Tree deriving (Eq,Show)
 
@@ -70,8 +74,15 @@ data Commit = Commit {
 } deriving (Eq,Show)
 
 
+toCommit :: Blob -> Maybe Commit
+toCommit (Blob content BCommit _) = parseCommit content
+toCommit _ = Nothing
+
 parseBlob :: ObjectId -> C.ByteString -> Maybe Blob
 parseBlob sha1 blob = eitherToMaybe $ parseOnly (blobParser sha1) blob
+
+extractTree :: Commit -> Tree
+extractTree = Tree . C.unpack . getTree
 
 -- header: "type size\0"
 -- sha1 $ header ++ content
