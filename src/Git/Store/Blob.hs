@@ -3,29 +3,19 @@
 module Git.Store.Blob (
     parseTree
   , parseCommit
-  , parsePerson
+  , parsePerson     -- Remove?
+  , parseBlob
   , Commit(..)
+  , Blob(..)
+  , BlobType(..)
 ) where
 
 import Prelude hiding (take, takeWhile)
 import qualified Data.ByteString.Char8 as C
 import qualified Data.ByteString as B
-import qualified Data.ByteString.Lazy as L
-import qualified Codec.Compression.Zlib as Z
-import qualified Crypto.Hash.SHA1 as SHA1
 import Data.Attoparsec.ByteString.Char8
-import Data.Attoparsec.Combinator
 import Control.Applicative ((<|>))
--- FIXME -> don't use isJust/fromJust
-import Data.Maybe                                           (isJust, fromJust)
-import Text.Printf                                          (printf)
-import Git.Pack.Packfile
-import Git.Pack.Delta                                       (patch)
 import Git.Common                                           (eitherToMaybe, ObjectId)
-import System.FilePath
-import System.Directory
-import Control.Monad                                        (unless, liftM)
-
 {-
 data Person = Person {
     getPersonName     :: B.ByteString
@@ -47,6 +37,22 @@ data GitObject = GBlob {
 } | GTag deriving (Show, Eq)
 -}
 
+data BlobType = BTree | BCommit | BTag | BBlob deriving (Eq)
+
+instance Show BlobType where
+    show BTree      = "tree"
+    show BCommit    = "commit"
+    show BTag       = "tag"
+    show BBlob      = "blob"
+
+data Blob = Blob {
+    getBlobContent  :: B.ByteString
+  , objType         :: BlobType
+  , sha             :: ObjectId
+}
+
+--data Blob = BlobCommit Commit | BlobTree Tree deriving (Eq,Show)
+
 data Author = Author B.ByteString B.ByteString deriving (Eq, Show)
 data Commiter = Commiter String String deriving (Eq, Show)
 
@@ -62,6 +68,25 @@ data Commit = Commit {
   , getCommiter    :: Commiter
   , getMessage     :: B.ByteString
 } deriving (Eq,Show)
+
+
+parseBlob :: ObjectId -> C.ByteString -> Maybe Blob
+parseBlob sha1 blob = eitherToMaybe $ parseOnly (blobParser sha1) blob
+
+-- header: "type size\0"
+-- sha1 $ header ++ content
+blobParser :: ObjectId -> Parser Blob
+blobParser sha1 = do
+   objType <- string "commit" <|> string "tree" <|> string "blob" <|> string "tag"
+   char ' '
+   size <- takeWhile isDigit
+   char '\0'
+   blob <- takeByteString
+   return $ Blob blob (obj objType) sha1
+   where obj "commit"   = BBlob
+         obj "tree"     = BTree
+         obj "tag"      = BTag
+         obj "blob"     = BBlob
 
 
 parseTree :: C.ByteString -> Maybe Tree

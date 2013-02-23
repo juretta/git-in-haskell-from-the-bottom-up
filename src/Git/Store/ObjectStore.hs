@@ -2,7 +2,6 @@
 
 module Git.Store.ObjectStore (
     createEmptyGitRepository
-  , encodeObject
   , pathForObject
   , pathForPack
   , createGitRepositoryFromPackfile
@@ -18,33 +17,18 @@ import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as L
 import qualified Codec.Compression.Zlib as Z
 import qualified Crypto.Hash.SHA1 as SHA1
-import qualified Data.Attoparsec.ByteString.Char8 as AC
-import Control.Applicative ((<|>))
 -- FIXME -> don't use isJust/fromJust
 import Data.Maybe                                           (isJust, fromJust)
 import Text.Printf                                          (printf)
 import Git.Pack.Packfile
 import Git.Pack.Delta                                       (patch)
-import Git.Common                                           (GitRepository(..), eitherToMaybe, ObjectId)
+import Git.Common                                           (GitRepository(..), ObjectId)
 -- Tree
 import Git.Store.Blob
 import System.FilePath
 import System.Directory
 import Control.Monad                                        (unless, liftM)
-import Data.Char                                            (isSpace)
 import Debug.Trace
-
-
-data Object = ResolvedObject {
-    getObjectType   :: PackObjectType
-  , getContent      :: B.ByteString
-  , getSize         :: Int
-  , sha1            :: String
-} | UnresolvedObject {
-    getObjectType   :: PackObjectType
-  , deltaData       :: B.ByteString
-  , getSize         :: Int
-}deriving (Show, Eq, Ord)
 
 createGitRepositoryFromPackfile :: GitRepository -> FilePath -> IO ()
 createGitRepositoryFromPackfile target packFile = do
@@ -59,45 +43,44 @@ createGitRepositoryFromPackfile target packFile = do
 unpackPackfile :: GitRepository -> Packfile -> IO ()
 unpackPackfile _ InvalidPackfile = error "Attempting to unpack an invalid packfile"
 unpackPackfile repo@GitRepository{..} (Packfile _ _ objs) = do
-        let encodedObjects = encodeObjects objs
-        unresolvedObjects <- writeObjects encodedObjects
+        unresolvedObjects <- writeObjects objs
         _ <- writeDeltas repo unresolvedObjects
         putStrLn "Done"
-    where   writeObjects (r@(ResolvedObject objType content size sha1):xs) = do
-                let (path, name) = pathForObject getName sha1
-                _ <- writeObject repo r
+    where   writeObjects (x@(PackfileObject (OBJ_REF_DELTA _) _ _):xs) = liftM (x:) (writeObjects xs)
+            writeObjects ((PackfileObject objType _ content) :xs) = do
+                _ <- writeBlob repo (tt objType) content
                 writeObjects xs
-            writeObjects (x@(UnresolvedObject{}):xs) = liftM (x:) (writeObjects xs)
             writeObjects []     = return []
-            encodeObjects       = map encodeObject
+            tt OBJ_COMMIT       = BCommit
+            tt OBJ_TREE         = BTree
+            tt OBJ_BLOB         = BBlob
+            tt OBJ_TAG          = BTag
+            tt _                = error "Unexpected blob type"
 
-writeDeltas :: GitRepository -> [Object] -> IO ()
+writeDeltas :: GitRepository -> [PackfileObject] -> IO ()
 writeDeltas repo (x:xs) = do
-    f <- writeDelta repo x
+    _ <- writeDelta repo x
     writeDeltas repo xs
 writeDeltas _ [] = return ()
 
-writeDelta :: GitRepository -> Object -> IO (Maybe FilePath)
-writeDelta repo (UnresolvedObject ty@(OBJ_REF_DELTA baseObject) content size) = do
+writeDelta :: GitRepository -> PackfileObject -> IO (Maybe FilePath)
+writeDelta repo (PackfileObject ty@(OBJ_REF_DELTA _) _ content) = do
         base <- case toObjectId ty of
             Just sha -> readObject repo sha
             _        -> return Nothing
         if isJust base then
-            case patch (getContent $ fromJust base) content of
+            case patch (getBlobContent $ fromJust base) content of
                 Right target -> do
                                 let base'        = fromJust base
-                                    (path, name) = pathForObject (getName repo) (sha1 base')
-                                    filename     = path </> name
-                                    header       = headerForBlob (objectTypeToString $ getObjectType base') target
-                                    blob         = header `C.append` target
-                                    obj          = ResolvedObject (getObjectType base') blob (C.length target) $ hsh blob
-                                _ <- writeObject repo obj
+                                filename <- writeBlob repo (objType base') target
                                 return $ Just filename
-                Left msg     -> return Nothing
+                Left _       -> return Nothing
         else return Nothing -- FIXME - base object doesn't exist yet
+writeDelta _ _ = error "Don't expect a resolved object here"
 
 
 updateHead :: GitRepository -> Packfile -> IO ()
+updateHead _ InvalidPackfile = error "Unexpected invalid packfile"
 updateHead repo (Packfile _ _ objs) = do
     let commits = filter isCommit objs
     unless (null commits) $
@@ -105,8 +88,8 @@ updateHead repo (Packfile _ _ objs) = do
             ref = "refs/heads/master"
             in
             do
-                let obj = encodeObject commit
-                createRef repo ref (sha1 obj)
+                let (sha1, _) = encodeBlob BCommit (objectData commit)
+                createRef repo ref sha1
                 createSymRef repo "HEAD" ref
     where isCommit ob = objectType ob == OBJ_COMMIT
 
@@ -132,71 +115,43 @@ pathForObject repoName sha | length sha == 40 = (repoName </> ".git" </> "object
           rest = drop 2 sha
 pathForObject _ _ = ("", "")
 
-type Repository = String
-
 -- header: "type size\0"
 -- sha1 $ header ++ content
-readObject :: GitRepository -> ObjectId -> IO (Maybe Object)
+readObject :: GitRepository -> ObjectId -> IO (Maybe Blob)
 readObject GitRepository{..} sha = do
     let (path, name) = pathForObject getName sha
         filename     = path </> name
     exists <- trace ("readObject: " ++ filename) $ doesFileExist filename
     if exists then do
         bs <- C.readFile filename
-        return $ parseBlob $ inflate bs
+        return $ parseBlob sha $ inflate bs
     else return Nothing
-    where parseBlob blob = eitherToMaybe $ AC.parseOnly (blobParser sha) blob
-          inflate blob = B.concat $ L.toChunks $ Z.decompress $ L.fromChunks [blob]
+    where inflate blob = B.concat $ L.toChunks $ Z.decompress $ L.fromChunks [blob]
 
 -- header: "type size\0"
 -- sha1 $ header ++ content
-blobParser :: ObjectId -> AC.Parser Object
-blobParser sha1 = do
-   objType <- AC.string "commit" <|> AC.string "tree" <|> AC.string "blob" <|> AC.string "tag"
-   AC.char ' '
-   size <- AC.takeWhile AC.isDigit
-   AC.char '\0'
-   blob <- AC.takeByteString
-   return $ ResolvedObject (obj objType) blob (read $ C.unpack size) sha1
-   where obj "commit"   = OBJ_COMMIT
-         obj "tree"     = OBJ_TREE
-         obj "blob"     = OBJ_BLOB
-         obj "tag"      = OBJ_TAG
+encodeBlob :: BlobType -> C.ByteString -> (ObjectId, C.ByteString)
+encodeBlob blobType content = do
+    let header       = headerForBlob (C.pack $ show $ blobType)
+        blob         = header `C.append` content
+        sha1         = hsh blob
+    (sha1, blob)
+    where headerForBlob objType = objType `C.append` " " `C.append` C.pack (show $ C.length content) `C.append` "\0"
+          hsh = toHex . SHA1.hash
 
-
-
--- header: "type size\0"
--- sha1 $ header ++ content
-writeObject :: GitRepository -> Object -> IO ()
-writeObject _ (UnresolvedObject {}) = error "Can't write an UnresolvedObject"
-writeObject GitRepository{..} obj = do
-    let (path, name) = pathForObject getName $ sha1 obj
+writeBlob :: GitRepository -> BlobType -> C.ByteString -> IO FilePath
+writeBlob GitRepository{..} blobType content = do
+    let (sha1, blob) = encodeBlob blobType content
+        (path, name) = pathForObject getName sha1
         filename     = path </> name
     _ <- createDirectoryIfMissing True path
-    L.writeFile filename $ compress (getContent obj)
+    L.writeFile filename $ compress blob
+    return filename
     where compress data' = Z.compress $ L.fromChunks [data'] -- FIXME should data be lazy in the first place?
 
-hsh :: B.ByteString -> String
-hsh = toHex . SHA1.hash
 
-objectTypeToString :: PackObjectType -> B.ByteString
-objectTypeToString OBJ_COMMIT = "commit"
-objectTypeToString OBJ_TREE   = "tree"
-objectTypeToString OBJ_BLOB   = "blob"
-objectTypeToString OBJ_TAG    = "tag"
 
-encodeObject :: PackfileObject -> Object
-encodeObject obj@(PackfileObject ot@(OBJ_REF_DELTA _) size content) = UnresolvedObject ot content size
-encodeObject obj@(PackfileObject ot size _) =
-        ResolvedObject ot blob size (hsh blob)
-    where header obj' =
-            let blobType = objType obj'
-            in  headerForBlob blobType $ objectData obj'
-          blob                              = header obj `C.append` objectData obj
-          objType (PackfileObject t _ _)    = objectTypeToString t
 
-headerForBlob :: B.ByteString -> B.ByteString -> B.ByteString
-headerForBlob objType content = objType `C.append` " " `C.append` C.pack (show $ C.length content) `C.append` "\0"
 
 createEmptyGitRepository :: FilePath -> IO ()
 createEmptyGitRepository gitDir =
