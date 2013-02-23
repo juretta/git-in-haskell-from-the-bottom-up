@@ -1,5 +1,7 @@
 {-# LANGUAGE OverloadedStrings, DoAndIfThenElse #-}
 
+-- | Convert a packfile (ByteString) into the internal "Packfile"
+-- representation.
 module Git.Pack.Packfile (
     packRead
   , Packfile(..)
