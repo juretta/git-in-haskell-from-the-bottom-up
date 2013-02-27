@@ -27,59 +27,70 @@ import System.Directory
 import Control.Monad                                        (unless, liftM, join)
 import Data.Char                                            (isSpace)
 import Debug.Trace
+import Control.Monad.Reader
 
 -- | Updates files in the working tree to match the given <tree-ish>
---
---
---
-checkoutHead :: GitRepository -> IO ()
-checkoutHead repo = do
-    let dir = getName repo
-    tip <- readHead repo
-    maybeTree <- resolveTree repo tip
-    walkTree repo dir $ fromJust maybeTree
 
-walkTree :: GitRepository -> FilePath -> Tree -> IO ()
-walkTree repo parent tree = do
+type WithRepository = ReaderT GitRepository IO
+
+-- runReaderT checkoutHead g
+
+checkoutHead :: WithRepository ()
+checkoutHead = do
+    repo <- ask
+    let dir = getName repo
+    tip <- readHead
+    maybeTree <- resolveTree tip
+    walkTree dir $ fromJust maybeTree
+
+walkTree :: FilePath -> Tree -> WithRepository ()
+walkTree parent tree = do
     let entries = getEntries tree
     mapM_ handleEntry entries
     where handleEntry (TreeEntry "40000" path sha) = do
                                 let dir = parent </> toFilePath path
-                                createDirectory dir
-                                maybeTree <- resolveTree repo $ toHex sha
-                                walkTree repo dir $ fromJust maybeTree
+                                liftIO $ createDirectory dir
+                                repo <- ask
+                                maybeTree <- resolveTree $ toHex sha
+                                walkTree dir $ fromJust maybeTree
           handleEntry (TreeEntry mode path sha) = do
-                        content <- readBlob repo $ toHex sha
-                        B.writeFile (parent </> toFilePath path) (getBlobContent $ fromJust content)
+                        repo <- ask
+                        content <- liftIO $ readBlob repo $ toHex sha
+                        liftIO $ B.writeFile (parent </> toFilePath path) (getBlobContent $ fromJust content)
           toFilePath = C.unpack
 
 -- | Resolve a tree given a <tree-ish>
 -- Similar to `parse_tree_indirect` defined in tree.c
-resolveTree :: GitRepository -> ObjectId -> IO (Maybe Tree)
-resolveTree repo sha = do
-        blob <- readBlob repo sha -- readBlob :: GitRepository -> ObjectId -> IO (Maybe Blob)
+resolveTree :: ObjectId -> WithRepository (Maybe Tree)
+resolveTree sha = do
+        repo <- ask
+        blob <- liftIO $ readBlob repo sha -- readBlob :: GitRepository -> ObjectId -> IO (Maybe Blob)
         walk $ fromJust blob -- fmap walk blob
-    where walk t@(Blob _ BTree sha1)                = readTree repo sha1
-          walk c@(Blob _ BCommit _)                 = do
-                                                    let maybeCommit = parseCommit $ getBlobContent c
-                                                    extractTree repo $ fromJust maybeCommit
-          walk _                                    = error "Urgh"
+    where walk  t@(Blob _ BTree sha1)                = do
+                                                        repo <- ask
+                                                        liftIO $ readTree repo sha1
+          walk  c@(Blob _ BCommit _)                 = do
+                                                        let maybeCommit = parseCommit $ getBlobContent c
+                                                        extractTree $ fromJust maybeCommit
+          walk _                                       = error "Urgh"
 
-extractTree :: GitRepository -> Commit -> IO (Maybe Tree)
-extractTree repo commit = do 
+extractTree :: Commit -> WithRepository (Maybe Tree)
+extractTree commit = do
     let sha = C.unpack $ getTree commit
-    readTree repo sha
+    repo <- ask
+    liftIO $ readTree repo sha
 
 toHex :: C.ByteString -> String
 toHex bytes = C.unpack bytes >>= printf "%02x"
 
-readHead :: GitRepository -> IO ObjectId
-readHead repo = do
+readHead :: WithRepository ObjectId
+readHead = do
+    repo <- ask
     let gitDir = getGitDirectory repo
-    ref <- C.readFile (gitDir </> "HEAD")
+    ref <- liftIO $ C.readFile (gitDir </> "HEAD")
     -- TODO check if valid HEAD
     let unwrappedRef = C.unpack $ strip $ head $ tail $ C.split ':' ref
-    obj <- C.readFile (gitDir </> unwrappedRef)
+    obj <- liftIO $ C.readFile (gitDir </> unwrappedRef)
     return $ C.unpack $ strip obj
   where strip = C.takeWhile (not . isSpace) . C.dropWhile isSpace
 

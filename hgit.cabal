@@ -57,7 +57,8 @@ executable  hgit
                     bytestring >= 0.9,
                     attoparsec >= 0.10,
                     text >= 0.11,
-                    network >= 2.3
+                    network >= 2.3,
+                    mtl
   ghc-options:
                     -Wall
                     -rtsopts
