@@ -6,11 +6,11 @@ module Git.Store.Blob (
   , parsePerson     -- Remove?
   , parseBlob
   , toCommit
-  , extractTree
   , Commit(..)
   , Blob(..)
   , BlobType(..)
   , Tree(..)
+  , TreeEntry(..)
 ) where
 
 import Prelude hiding (take, takeWhile)
@@ -62,6 +62,13 @@ data Commiter = Commiter String String deriving (Eq, Show)
 
 data Tree = Tree {
     getObjectId :: ObjectId
+  , getEntries  :: [TreeEntry]
+} deriving (Eq, Show)
+
+data TreeEntry = TreeEntry {
+    getMode    :: C.ByteString
+  , getPath    :: C.ByteString
+  , getBlobSha :: C.ByteString
 } deriving (Eq, Show)
 
 data Commit = Commit {
@@ -81,9 +88,6 @@ toCommit _ = Nothing
 parseBlob :: ObjectId -> C.ByteString -> Maybe Blob
 parseBlob sha1 blob = eitherToMaybe $ parseOnly (blobParser sha1) blob
 
-extractTree :: Commit -> Tree
-extractTree = Tree . C.unpack . getTree
-
 -- header: "type size\0"
 -- sha1 $ header ++ content
 blobParser :: ObjectId -> Parser Blob
@@ -91,7 +95,7 @@ blobParser sha1 = do
    objType <- string "commit" <|> string "tree" <|> string "blob" <|> string "tag"
    char ' '
    size <- takeWhile isDigit
-   char '\0'
+   nul
    blob <- takeByteString
    return $ Blob blob (obj objType) sha1
    where obj "commit"   = BCommit
@@ -100,11 +104,47 @@ blobParser sha1 = do
          obj "blob"     = BBlob
 
 
-parseTree :: C.ByteString -> Maybe Tree
-parseTree input = Nothing -- eitherToMaybe $ parseOnly commitParser input
+parseTree :: ObjectId -> C.ByteString -> Maybe Tree
+parseTree sha input = eitherToMaybe $ parseOnly (treeParser sha) input
 
 parseCommit :: C.ByteString -> Maybe Commit
 parseCommit input = eitherToMaybe $ parseOnly commitParser input
+
+{-
+from e.g. `ls-tree.c`, `tree-walk.c`
+-}
+treeParser :: ObjectId -> Parser Tree
+treeParser sha = do
+    entries <- many' treeEntryParser
+    return $ Tree sha entries
+    
+
+-- | An entry in the tree has the following format:
+--
+-- @
+-- mode SP path NUL sha1
+-- @
+--
+-- E.g.
+-- @
+-- 100644 .ghci\NUL\208k\227\&0F\190\137A$\210\193\216j\247#\SI\ETBw;?
+-- @
+--
+-- with:
+--   * mode: octal
+--   * SP: space
+--   * path: filename
+--   * NUL: null byte
+--   * sha1: 20 byte of SHA1
+treeEntryParser :: Parser TreeEntry
+treeEntryParser = do
+    mode <- takeTill (== ' ')
+    space
+    path <- takeTill (== '\0')
+    nul
+    sha <- take 20
+    return $ TreeEntry mode path sha
+
 
 {-
 tree b5213cb334e855fb5c89edc99d54606377e15d70
@@ -141,3 +181,6 @@ data Person = Person {
   , getPersonEmail  :: B.ByteString
   , getDate         :: B.ByteString -- FIXME
 } deriving (Eq, Show)
+
+nul :: Parser Char
+nul = satisfy (== '\0')

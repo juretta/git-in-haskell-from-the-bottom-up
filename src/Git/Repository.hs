@@ -1,4 +1,4 @@
-{-# LANGUAGE OverloadedStrings, RecordWildCards, DoAndIfThenElse #-}
+{-# LANGUAGE OverloadedStrings, DoAndIfThenElse #-}
 
 module Git.Repository (
     checkoutHead
@@ -26,7 +26,6 @@ import System.FilePath
 import System.Directory
 import Control.Monad                                        (unless, liftM, join)
 import Data.Char                                            (isSpace)
-import Data.Maybe
 import Debug.Trace
 
 -- | Updates files in the working tree to match the given <tree-ish>
@@ -34,18 +33,45 @@ import Debug.Trace
 --
 --
 checkoutHead :: GitRepository -> IO ()
-checkoutHead repo = error "repo"
+checkoutHead repo = do
+    let dir = getName repo
+    tip <- readHead repo
+    maybeTree <- resolveTree repo tip
+    walkTree repo dir $ fromJust maybeTree
+
+walkTree :: GitRepository -> FilePath -> Tree -> IO ()
+walkTree repo parent tree = do
+    let entries = getEntries tree
+    mapM_ handleEntry entries
+    where handleEntry (TreeEntry "40000" path sha) = do
+                                let dir = parent </> toFilePath path
+                                createDirectory dir
+                                maybeTree <- resolveTree repo $ toHex sha
+                                walkTree repo dir $ fromJust maybeTree
+          handleEntry (TreeEntry mode path sha) = do
+                        content <- readBlob repo $ toHex sha
+                        B.writeFile (parent </> toFilePath path) (getBlobContent $ fromJust content)
+          toFilePath = C.unpack
 
 -- | Resolve a tree given a <tree-ish>
 -- Similar to `parse_tree_indirect` defined in tree.c
 resolveTree :: GitRepository -> ObjectId -> IO (Maybe Tree)
 resolveTree repo sha = do
-        blob <- readBlob repo sha
-        return $ join $ fmap walk blob
-    where walk t@(Blob _ BTree _)                   = return $ Tree "tree" -- FIXME
-          walk c@(Blob _ BCommit _)                 = fmap extractTree $ parseCommit $ getBlobContent c
+        blob <- readBlob repo sha -- readBlob :: GitRepository -> ObjectId -> IO (Maybe Blob)
+        walk $ fromJust blob -- fmap walk blob
+    where walk t@(Blob _ BTree sha1)                = readTree repo sha1
+          walk c@(Blob _ BCommit _)                 = do
+                                                    let maybeCommit = parseCommit $ getBlobContent c
+                                                    extractTree repo $ fromJust maybeCommit
           walk _                                    = error "Urgh"
 
+extractTree :: GitRepository -> Commit -> IO (Maybe Tree)
+extractTree repo commit = do 
+    let sha = C.unpack $ getTree commit
+    readTree repo sha
+
+toHex :: C.ByteString -> String
+toHex bytes = C.unpack bytes >>= printf "%02x"
 
 readHead :: GitRepository -> IO ObjectId
 readHead repo = do

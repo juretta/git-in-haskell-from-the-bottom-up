@@ -6,7 +6,7 @@ module Git.Store.ObjectStore (
   , pathForPack
   , createGitRepositoryFromPackfile
   , updateHead
-  -- ?
+  , readTree
   , readBlob
   , createRef
   , getGitDirectory
@@ -29,7 +29,6 @@ import System.FilePath
 import System.Directory
 import Control.Monad                                        (unless, liftM)
 import Data.Foldable                                        (forM_)
-import Debug.Trace
 
 createGitRepositoryFromPackfile :: GitRepository -> FilePath -> IO ()
 createGitRepositoryFromPackfile target packFile = do
@@ -110,13 +109,18 @@ pathForObject repoName sha | length sha == 40 = (repoName </> ".git" </> "object
           rest = drop 2 sha
 pathForObject _ _ = ("", "")
 
+readTree :: GitRepository -> ObjectId -> IO (Maybe Tree)
+readTree repo sha = do
+    treeBlob <- readBlob repo sha
+    return $ parseTree sha (getBlobContent $ fromJust treeBlob)
+
 -- header: "type size\0"
 -- sha1 $ header ++ content
 readBlob :: GitRepository -> ObjectId -> IO (Maybe Blob)
 readBlob GitRepository{..} sha = do
     let (path, name) = pathForObject getName sha
         filename     = path </> name
-    exists <- trace ("readBlob: " ++ filename) $ doesFileExist filename
+    exists <- doesFileExist filename
     if exists then do
         bs <- C.readFile filename
         return $ parseBlob sha $ inflate bs
