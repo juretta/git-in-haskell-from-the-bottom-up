@@ -14,6 +14,7 @@ import qualified Data.ByteString as B
 import qualified Data.ByteString.Char8 as C
 import qualified Data.ByteString.Lazy as L
 import Control.Applicative                      ((<$>))
+import Control.Monad.Reader                     (runReaderT)
 import System.Directory                         (removeFile, createDirectoryIfMissing)
 import System.FilePath                          ((</>), takeFileName, dropExtension)
 import Network.Socket                           (withSocketsDo)
@@ -23,6 +24,7 @@ import Git.Common
 import Git.TcpClient
 import Git.PackProtocol
 import Git.Store.ObjectStore
+import Git.Repository
 
 refDiscovery :: String -> String -> String
 refDiscovery host repo = pktLine $ "git-upload-pack /" ++ repo ++ "\0host="++host++"\0" -- ++ flushPkt -- Tell the server to disconnect
@@ -101,6 +103,8 @@ clone' repo Remote{..} = withSocketsDo $
             tmpPack = dir </> "tmp_pack_incoming"
         _ <- createDirectoryIfMissing True dir
         B.writeFile tmpPack packFile
-        createGitRepositoryFromPackfile repo tmpPack
+        _ <- runReaderT (createGitRepositoryFromPackfile tmpPack) repo
         removeFile tmpPack
+        putStrLn "Checking out HEAD"
+        _ <- runReaderT checkoutHead repo
         putStrLn "Finished"
