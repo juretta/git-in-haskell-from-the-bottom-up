@@ -18,8 +18,7 @@ import Data.Maybe                                           (isJust, fromJust)
 import Text.Printf                                          (printf)
 import Git.Pack.Packfile
 import Git.Pack.Delta                                       (patch)
-import Git.Common                                           (GitRepository(..), eitherToMaybe, ObjectId)
--- Tree
+import Git.Common                                           (GitRepository(..), eitherToMaybe, ObjectId, WithRepository)
 import Git.Store.Blob
 import Git.Store.ObjectStore
 import System.FilePath
@@ -30,10 +29,6 @@ import Debug.Trace
 import Control.Monad.Reader
 
 -- | Updates files in the working tree to match the given <tree-ish>
-
-type WithRepository = ReaderT GitRepository IO
-
--- runReaderT checkoutHead g
 
 checkoutHead :: WithRepository ()
 checkoutHead = do

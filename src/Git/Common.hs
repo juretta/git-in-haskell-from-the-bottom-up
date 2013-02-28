@@ -7,6 +7,7 @@ module Git.Common (
   , eitherToMaybe
   , GitRepository(..)
   , ObjectId
+  , WithRepository
 ) where
 
 import Text.Printf      (printf)
@@ -14,6 +15,8 @@ import Numeric          (showHex)
 import Data.Bits        (Bits, (.&.))
 
 type ObjectId = String
+
+type WithRepository = ReaderT GitRepository IO
 
 data GitRepository = GitRepository {
     getName         :: String

@@ -22,7 +22,7 @@ import Data.Maybe                                           (isJust, fromJust)
 import Text.Printf                                          (printf)
 import Git.Pack.Packfile
 import Git.Pack.Delta                                       (patch)
-import Git.Common                                           (GitRepository(..), ObjectId)
+import Git.Common                                           (GitRepository(..), ObjectId, WithRepository)
 -- Tree
 import Git.Store.Blob
 import System.FilePath
@@ -30,9 +30,6 @@ import System.Directory
 import Control.Monad                                        (unless, liftM)
 import Data.Foldable                                        (forM_)
 import Control.Monad.Reader hiding (forM_)
-
--- Move into common?
-type WithRepository = ReaderT GitRepository IO
 
 createGitRepositoryFromPackfile :: FilePath -> WithRepository ()
 createGitRepositoryFromPackfile packFile = do
