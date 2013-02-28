@@ -29,26 +29,32 @@ import System.FilePath
 import System.Directory
 import Control.Monad                                        (unless, liftM)
 import Data.Foldable                                        (forM_)
+import Control.Monad.Reader hiding (forM_)
 
-createGitRepositoryFromPackfile :: GitRepository -> FilePath -> IO ()
-createGitRepositoryFromPackfile target packFile = do
-    pack <- packRead packFile
+-- Move into common?
+type WithRepository = ReaderT GitRepository IO
+
+createGitRepositoryFromPackfile :: FilePath -> WithRepository ()
+createGitRepositoryFromPackfile packFile = do
+    pack <- liftIO $ packRead packFile
+    target <- ask
     let repoName = getName target
         repo = GitRepository repoName
-    unpackPackfile repo pack
-    updateHead repo pack
-
+    unpackPackfile pack
+    updateHead pack
 
 -- TODO properly handle the error condition here
-unpackPackfile :: GitRepository -> Packfile -> IO ()
-unpackPackfile _ InvalidPackfile = error "Attempting to unpack an invalid packfile"
-unpackPackfile repo@GitRepository{..} (Packfile _ _ objs) = do
+unpackPackfile :: Packfile -> WithRepository ()
+unpackPackfile InvalidPackfile = error "Attempting to unpack an invalid packfile"
+unpackPackfile (Packfile _ _ objs) = do
+        repo <- ask
         unresolvedObjects <- writeObjects objs
-        forM_ unresolvedObjects writeDelta
-        putStrLn "Done"
+        liftIO $ forM_ unresolvedObjects $ writeDelta repo
+        liftIO $ putStrLn "Done"
     where   writeObjects (x@(PackfileObject (OBJ_REF_DELTA _) _ _):xs) = liftM (x:) (writeObjects xs)
             writeObjects ((PackfileObject objType _ content) :xs) = do
-                _ <- writeBlob repo (tt objType) content
+                repo <- ask
+                _ <- liftIO $ writeBlob repo (tt objType) content
                 writeObjects xs
             writeObjects []     = return []
 
@@ -58,9 +64,9 @@ unpackPackfile repo@GitRepository{..} (Packfile _ _ objs) = do
             tt OBJ_TAG          = BTag
             tt _                = error "Unexpected blob type"
 
-            writeDelta (PackfileObject ty@(OBJ_REF_DELTA _) _ content) = do
+            writeDelta repo (PackfileObject ty@(OBJ_REF_DELTA _) _ content) = do
                     base <- case toObjectId ty of
-                        Just sha -> readBlob repo sha
+                        Just sha -> liftIO $ readBlob repo sha
                         _        -> return Nothing
                     if isJust base then
                         case patch (getBlobContent $ fromJust base) content of
@@ -70,12 +76,13 @@ unpackPackfile repo@GitRepository{..} (Packfile _ _ objs) = do
                                             return $ Just filename
                             Left _       -> return Nothing
                     else return Nothing -- FIXME - base object doesn't exist yet
-            writeDelta _ = error "Don't expect a resolved object here"
+            writeDelta repo _ = error "Don't expect a resolved object here"
 
 
-updateHead :: GitRepository -> Packfile -> IO ()
-updateHead _ InvalidPackfile = error "Unexpected invalid packfile"
-updateHead repo (Packfile _ _ objs) = do
+updateHead :: Packfile -> WithRepository ()
+updateHead InvalidPackfile = error "Unexpected invalid packfile"
+updateHead (Packfile _ _ objs) = do
+    repo <- ask
     let commits = filter isCommit objs
     unless (null commits) $
         let commit = head commits
@@ -83,22 +90,24 @@ updateHead repo (Packfile _ _ objs) = do
             in
             do
                 let (sha1, _) = encodeBlob BCommit (objectData commit)
-                createRef repo ref sha1
-                createSymRef repo "HEAD" ref
+                createRef ref sha1
+                createSymRef "HEAD" ref
     where isCommit ob = objectType ob == OBJ_COMMIT
 
 -- ref: refs/heads/master
-createSymRef :: GitRepository -> String -> String -> IO ()
-createSymRef repo symName ref =
-        writeFile (getGitDirectory repo </> symName) $ "ref: " ++ ref ++ "\n"
+createSymRef :: String -> String -> WithRepository ()
+createSymRef symName ref = do
+        repo <- ask
+        liftIO $ writeFile (getGitDirectory repo </> symName) $ "ref: " ++ ref ++ "\n"
 
 
-createRef :: GitRepository -> String -> String -> IO ()
-createRef repo ref sha = do
+createRef :: String -> String -> WithRepository ()
+createRef ref sha = do
+    repo <- ask
     let (path, name) = splitFileName ref
         dir          = (getGitDirectory repo) </> path
-    _ <- createDirectoryIfMissing True dir
-    writeFile (dir </> name) (sha ++ "\n")
+    _ <- liftIO $ createDirectoryIfMissing True dir
+    liftIO $ writeFile (dir </> name) (sha ++ "\n")
 
 pathForPack :: GitRepository -> FilePath
 pathForPack repo = (getGitDirectory repo) </> "objects" </> "pack"
