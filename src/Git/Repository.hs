@@ -21,11 +21,14 @@ import Git.Pack.Delta                                       (patch)
 import Git.Common                                           (GitRepository(..), eitherToMaybe, ObjectId, WithRepository)
 import Git.Store.Blob
 import Git.Store.ObjectStore
+import Git.Store.Index
 import System.FilePath
 import System.Directory
 import Control.Monad                                        (unless, liftM, join)
 import Data.Char                                            (isSpace)
 import Debug.Trace
+import System.Posix.Files
+import System.Posix.Types
 import Control.Monad.Reader
 
 -- | Updates files in the working tree to match the given <tree-ish>
@@ -36,23 +39,31 @@ checkoutHead = do
     let dir = getName repo
     tip <- readHead
     maybeTree <- resolveTree tip
-    walkTree dir $ fromJust maybeTree
+    indexEntries <- walkTree [] dir $ fromJust maybeTree
+    writeIndex indexEntries
+    return ()
 
-walkTree :: FilePath -> Tree -> WithRepository ()
-walkTree parent tree = do
+walkTree :: [IndexEntry] -> FilePath -> Tree -> WithRepository [IndexEntry]
+walkTree acc parent tree = do
     let entries = getEntries tree
-    mapM_ handleEntry entries
-    where handleEntry (TreeEntry "40000" path sha) = do
+    foldM handleEntry acc entries
+    where handleEntry acc (TreeEntry "40000" path sha) = do
                                 let dir = parent </> toFilePath path
                                 liftIO $ createDirectory dir
-                                repo <- ask
                                 maybeTree <- resolveTree $ toHex sha
-                                walkTree dir $ fromJust maybeTree
-          handleEntry (TreeEntry mode path sha) = do
+                                walkTree acc dir $ fromJust maybeTree
+          handleEntry acc (TreeEntry mode path sha) = do
                         repo <- ask
+                        let fullPath = (parent </> toFilePath path)
                         content <- liftIO $ readBlob repo $ toHex sha
-                        liftIO $ B.writeFile (parent </> toFilePath path) (getBlobContent $ fromJust content)
+                        liftIO $ B.writeFile fullPath (getBlobContent $ fromJust content)
+                        indexEntry <- asIndexEntry fullPath sha
+                        return $ indexEntry : acc
           toFilePath = C.unpack
+          asIndexEntry path sha = do
+                stat <- liftIO $ getFileStatus path
+                indexEntryFor path Regular sha stat
+-- indexEntryFor :: FilePath -> GitFileMode -> ObjectId -> FileStatus -> IndexEntry
 
 -- | Resolve a tree given a <tree-ish>
 -- Similar to `parse_tree_indirect` defined in tree.c
