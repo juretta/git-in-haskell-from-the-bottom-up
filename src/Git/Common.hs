@@ -8,11 +8,13 @@ module Git.Common (
   , GitRepository(..)
   , ObjectId
   , WithRepository
+  , fromOctets
 ) where
 
 import Text.Printf      (printf)
 import Numeric          (showHex)
-import Data.Bits        (Bits, (.&.))
+import Data.Bits        (Bits, (.&.), (.|.), shiftL)
+import Data.Word
 
 type ObjectId = String
 
@@ -42,3 +44,8 @@ isMsbSet x = (x .&. 0x80) /= 0
 eitherToMaybe :: Either e a -> Maybe a
 eitherToMaybe (Right x) = Just x
 eitherToMaybe (Left _)  = Nothing
+
+fromOctets :: [Word8] -> Word32
+fromOctets = foldl accum 0
+  where
+    accum a o = (a `shiftL` 8) .|. fromIntegral o

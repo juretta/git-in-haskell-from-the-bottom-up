@@ -20,7 +20,7 @@ import Data.Maybe
 import Data.Char                        (ord)
 import Data.Word                        (Word8,Word32)
 import Data.Bits
-import Git.Common                       (isMsbSet)
+import Git.Common                       (isMsbSet, fromOctets)
 
 type Content = ByteString
 
@@ -98,12 +98,6 @@ parseObjectSize size iter = do
 
 
 -- =================================================================================
-
-
-fromOctets :: [Word8] -> Word32
-fromOctets = foldl accum 0
-  where
-    accum a o = (a `shiftL` 8) .|. fromIntegral o
 
 -- Map the internal representation of the object type to the PackObjectType
 toPackObjectType :: (Show a, Integral a) => a -> I.Iteratee ByteString IO (Maybe PackObjectType)
