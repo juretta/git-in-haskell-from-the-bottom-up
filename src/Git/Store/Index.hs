@@ -19,7 +19,6 @@ import Git.Common
 import Git.Store.ObjectStore                 (getGitDirectory)
 import Data.Char                             (ord)
 import System.FilePath
-import Debug.Trace
 import Data.Word
 import Data.Bits
 import Data.Binary.Builder
@@ -99,12 +98,12 @@ instance Binary IndexEntry where
             put zero                    -- 32-bit mtime nanosecond fractions
             put $ coerce dev            -- 32-bit dev
             put $ coerce inode'         -- 32-bit ino
-            put $ trace("toMode gitFileMode':" ++ (show $ toMode gitFileMode')) $ toMode gitFileMode'   -- 32-bit mode, see below
+            put $ toMode gitFileMode'   -- 32-bit mode, see below
             put $ coerce uid'           -- 32-bit uid
-            put $ trace ("length sha: " ++ (show $ length sha')) $ coerce gid'           -- 32-bit gid
-            put $ trace ("mode': " ++ show mode') $ coerce size'          -- filesize, truncated to 32-bit
+            put $ coerce gid'           -- 32-bit gid
+            put $ coerce size'          -- filesize, truncated to 32-bit
             mapM put sha'               -- 160-bit SHA-1 for the represented object - [Word8]
-            put $ trace("finalPath: " ++ show finalPath) $ flags                   -- 16-bit
+            put flags                   -- 16-bit
             mapM_ put finalPath          -- variable length - [Word8]
         where zero = (0::Word32)
               pathName              = name' -- ++ "\NUL"
@@ -159,7 +158,7 @@ indexEntryFor :: FilePath -> GitFileMode -> B.ByteString -> FileStatus -> WithRe
 indexEntryFor filePath gitFileMode sha stat = do
         repo <- ask
         let fileName = makeRelativeToRepoRoot (getName repo) filePath
-        return $ trace("indexEntryFor " ++ fileName ++ ", mode: " ++ show gitFileMode ++ ", sha: " ++ show sha) $ IndexEntry (statusChangeTime stat) (modificationTime stat)
+        return $ IndexEntry (statusChangeTime stat) (modificationTime stat)
                         (deviceID stat) (fileID stat) (fileMode stat)
                         (fileOwner stat) (fileGroup stat) (fileSize stat)
                         (B.unpack sha) gitFileMode fileName
@@ -171,7 +170,7 @@ encodeIndex :: Index -> WithRepository B.ByteString
 encodeIndex toWrite = do
     let indexEntries = sortIndexEntries $ getIndexEntries toWrite
         numEntries   = toEnum . fromEnum $ (length indexEntries)
-        header       = trace("indexEntries: " ++ show indexEntries) $ indexHeader numEntries
+        header       = indexHeader numEntries
         entries      = mconcat $ map encode indexEntries
         idx          = (toLazyByteString $ header) `L.append` entries
     return $ (lazyToStrictBS idx) `B.append` SHA1.hashlazy idx
