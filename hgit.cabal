@@ -64,8 +64,10 @@ executable  hgit
                     mtl
   ghc-options:
                     -Wall
+                    -Werror
                     -rtsopts
                     -fno-warn-unused-do-bind
+                    -fno-warn-unused-binds
                     -O2
                     -- -fno-warn-missing-signatures
 

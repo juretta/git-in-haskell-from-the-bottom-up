@@ -27,16 +27,12 @@ import Git.Common                                           (GitRepository(..), 
 import Git.Store.Blob
 import System.FilePath
 import System.Directory
-import Control.Monad                                        (unless, liftM)
 import Data.Foldable                                        (forM_)
 import Control.Monad.Reader hiding (forM_)
 
 createGitRepositoryFromPackfile :: FilePath -> WithRepository ()
 createGitRepositoryFromPackfile packFile = do
     pack <- liftIO $ packRead packFile
-    target <- ask
-    let repoName = getName target
-        repo = GitRepository repoName
     unpackPackfile pack
     updateHead pack
 
@@ -73,13 +69,12 @@ unpackPackfile (Packfile _ _ objs) = do
                                             return $ Just filename
                             Left _       -> return Nothing
                     else return Nothing -- FIXME - base object doesn't exist yet
-            writeDelta repo _ = error "Don't expect a resolved object here"
+            writeDelta _repo _ = error "Don't expect a resolved object here"
 
 
 updateHead :: Packfile -> WithRepository ()
 updateHead InvalidPackfile = error "Unexpected invalid packfile"
 updateHead (Packfile _ _ objs) = do
-    repo <- ask
     let commits = filter isCommit objs
     unless (null commits) $
         let commit = head commits

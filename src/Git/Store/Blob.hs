@@ -19,27 +19,6 @@ import qualified Data.ByteString as B
 import Data.Attoparsec.ByteString.Char8
 import Control.Applicative ((<|>))
 import Git.Common                                           (eitherToMaybe, ObjectId)
-import Debug.Trace
-{-
-data Person = Person {
-    getPersonName     :: B.ByteString
-  , getPersonEmail    :: B.ByteString
-} deriving (Show, Eq)
--}
-
-
-{-
-data TreeNode = TreeNode {
-    obj  :: GitObject
-  , name :: String
-} deriving (Show, Eq)
-
-data GitObject = GBlob {
-    content :: B.ByteString
-} | GTree {
-  nodes   :: [TreeNode]
-} | GTag deriving (Show, Eq)
--}
 
 data BlobType = BTree | BCommit | BTag | BBlob deriving (Eq)
 
@@ -54,8 +33,6 @@ data Blob = Blob {
   , objType         :: BlobType
   , sha             :: ObjectId
 } deriving (Eq, Show)
-
---data Blob = BlobCommit Commit | BlobTree Tree deriving (Eq,Show)
 
 data Author = Author B.ByteString B.ByteString deriving (Eq, Show)
 data Commiter = Commiter String String deriving (Eq, Show)
@@ -92,20 +69,21 @@ parseBlob sha1 blob = eitherToMaybe $ parseOnly (blobParser sha1) blob
 -- sha1 $ header ++ content
 blobParser :: ObjectId -> Parser Blob
 blobParser sha1 = do
-   objType <- string "commit" <|> string "tree" <|> string "blob" <|> string "tag"
+   objType' <- string "commit" <|> string "tree" <|> string "blob" <|> string "tag"
    char ' '
-   size <- takeWhile isDigit
+   _size <- takeWhile isDigit
    nul
    blob <- takeByteString
-   return $ Blob blob (obj objType) sha1
+   return $ Blob blob (obj objType') sha1
    where obj "commit"   = BCommit
          obj "tree"     = BTree
          obj "tag"      = BTag
          obj "blob"     = BBlob
+         obj _          = error "Invalid blob type" -- FIXME Let the parser fail
 
 
 parseTree :: ObjectId -> C.ByteString -> Maybe Tree
-parseTree sha input = eitherToMaybe $ parseOnly (treeParser sha) input
+parseTree sha' input = eitherToMaybe $ parseOnly (treeParser sha') input
 
 parseCommit :: C.ByteString -> Maybe Commit
 parseCommit input = eitherToMaybe $ parseOnly commitParser input
@@ -114,9 +92,9 @@ parseCommit input = eitherToMaybe $ parseOnly commitParser input
 from e.g. `ls-tree.c`, `tree-walk.c`
 -}
 treeParser :: ObjectId -> Parser Tree
-treeParser sha = do
+treeParser sha' = do
     entries <- many' treeEntryParser
-    return $ Tree sha entries
+    return $ Tree sha' entries
 
 
 -- | An entry in the tree has the following format:
@@ -142,8 +120,8 @@ treeEntryParser = do
     space
     path <- takeTill (== '\0')
     nul
-    sha <- take 20
-    return $ TreeEntry mode path sha
+    sha' <- take 20
+    return $ TreeEntry mode path sha'
 
 
 {-
@@ -162,11 +140,11 @@ commitParser = do
     maybeParent <- option Nothing parseParentCommit
     author <- "author " .*> parsePerson
     space
-    commiter <- "committer " .*> parsePerson
+    _commiter <- "committer " .*> parsePerson
     space
     space
     message <- takeByteString
-    return $ Commit tree maybeParent B.empty (Author (getPersonName author) (getPersonEmail author)) (Commiter "" "") message
+    return $ Commit tree maybeParent B.empty (Author (getPersonName author) (getPersonEmail author)) (Commiter "" "") message -- FIXME Use Commiter
 
 parseParentCommit :: Parser (Maybe C.ByteString)
 parseParentCommit = do

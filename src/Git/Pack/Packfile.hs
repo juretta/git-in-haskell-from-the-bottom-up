@@ -61,35 +61,35 @@ packRead = I.fileDriverRandom parsePackFileObjectHeader
 parsePackFileObjectHeader :: I.Iteratee ByteString IO Packfile
 parsePackFileObjectHeader = do
     magic       <- endianRead4 MSB -- 4 bytes
-    version     <- endianRead4 MSB
-    numObjects  <- endianRead4 MSB
+    version'    <- endianRead4 MSB
+    numObjects' <- endianRead4 MSB
     if packMagic == magic
-                then parseObjects version numObjects
+                then parseObjects version' numObjects'
                 else return InvalidPackfile
   where packMagic = fromOctets $ map (fromIntegral . ord) "PACK"
 
 parseObjects :: Word32 -> Word32 -> I.Iteratee ByteString IO Packfile
-parseObjects version num = do
+parseObjects version' num = do
     objs <- catMaybes <$> replicateM (fromIntegral num) parsePackObject
-    return $ Packfile version num objs
+    return $ Packfile version' num objs
 
 
 parsePackObject :: I.Iteratee ByteString IO (Maybe PackfileObject)
 parsePackObject = do
     byte <- I.head -- read 1 byte
-    let objectType  = byte `shiftR` 4 .&. 7 -- shift right and masking the 4th least significtan bit
+    let objectType' = byte `shiftR` 4 .&. 7 -- shift right and masking the 4th least significtan bit
         initial     = fromIntegral $ byte .&. 15
-    size <- if isMsbSet byte then parseObjectSize initial 0 else return initial
-    obj <- toPackObjectType objectType
+    size' <- if isMsbSet byte then parseObjectSize initial 0 else return initial
+    obj <- toPackObjectType objectType'
     content <- I.joinI $ enumInflate Zlib defaultDecompressParams I.stream2stream
-    return $ (\t -> PackfileObject t size content) <$> obj
+    return $ (\t -> PackfileObject t size' content) <$> obj
 
 -- Parse the variable length size header part of the object entry
 parseObjectSize :: Int -> Int -> I.Iteratee ByteString IO Int
-parseObjectSize size iter = do
+parseObjectSize size' iter = do
     nextByte <- I.head
     let add           = (coerce (nextByte .&. 127) :: Int) `shiftL` (4 + (iter * 7))
-        acc           = size + fromIntegral add
+        acc           = size' + fromIntegral add
     if isMsbSet nextByte then
         parseObjectSize acc (iter + 1)
     else

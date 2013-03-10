@@ -12,7 +12,6 @@ module Git.Common (
 ) where
 
 import Control.Monad.Reader
-import Control.Monad.Writer
 import Text.Printf      (printf)
 import Numeric          (showHex)
 import Data.Bits        (Bits, (.&.), (.|.), shiftL)

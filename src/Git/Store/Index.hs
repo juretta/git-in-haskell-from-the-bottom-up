@@ -13,8 +13,6 @@ import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as L
 import qualified Codec.Binary.UTF8.String as CS (encode)
 import qualified Crypto.Hash.SHA1 as SHA1
-import Control.Applicative ((<|>))
-import Control.Monad
 import Git.Common
 import Git.Store.ObjectStore                 (getGitDirectory)
 import Data.Char                             (ord)
@@ -90,7 +88,7 @@ struct cache_entry {
 };
 -}
 instance Binary IndexEntry where
-    put (IndexEntry cs ms dev inode' mode' uid' gid' size' sha' gitFileMode' name')
+    put (IndexEntry cs ms dev inode' _mode' uid' gid' size' sha' gitFileMode' name')
         = do
             put $ coerce cs             -- 32-bit ctime seconds
             put zero                    -- 32-bit ctime nanosecond fractions
@@ -108,7 +106,7 @@ instance Binary IndexEntry where
         where zero = (0::Word32)
               pathName              = name' -- ++ "\NUL"
               coerce  x             = (toEnum $ fromEnum x) :: Word32
-              toMode gitFileMode    = ((objType gitFileMode) `shiftL` 12) .|. permissions gitFileMode -- FIXME symlink and gitlink -> perm = 0
+              toMode fm             = ((objType fm) `shiftL` 12) .|. permissions fm -- FIXME symlink and gitlink -> perm = 0
               flags                 = (((toEnum . length $ pathName)::Word16) .&. 0xFFF) :: Word16 -- mask the 4 high order bits -- FIXME: length if the length is less than 0xFFF; otherwise 0xFFF is stored in this field.
               objType Regular       = 8         :: Word32     -- regular file     1000
               objType SymLink       = 10        :: Word32     -- symbolic link    1010
@@ -155,13 +153,13 @@ makeRelativeToRepoRoot repoName path = do
     where dirs = splitDirectories . normalise
 
 indexEntryFor :: FilePath -> GitFileMode -> B.ByteString -> FileStatus -> WithRepository IndexEntry
-indexEntryFor filePath gitFileMode sha stat = do
+indexEntryFor filePath gitFileMode' sha' stat = do
         repo <- ask
         let fileName = makeRelativeToRepoRoot (getName repo) filePath
         return $ IndexEntry (statusChangeTime stat) (modificationTime stat)
                         (deviceID stat) (fileID stat) (fileMode stat)
                         (fileOwner stat) (fileGroup stat) (fileSize stat)
-                        (B.unpack sha) gitFileMode fileName
+                        (B.unpack sha') gitFileMode' fileName
 -- consider moving to the HiRes variants (e.g. @statusChangeTimeHiRes@ instead
 -- of @statusChangeTime@) but at a cursory glance it doesn't look like it's
 -- possible to get the nanoseconds out of PosixTime???
