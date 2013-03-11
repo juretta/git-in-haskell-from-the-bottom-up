@@ -44,7 +44,7 @@ walkTree acc parent tree = do
                                 walkTree acc' dir $ fromJust maybeTree
           handleEntry acc' (TreeEntry _mode path sha') = do
                         repo <- ask
-                        let fullPath = (parent </> toFilePath path)
+                        let fullPath = parent </> toFilePath path
                         content <- liftIO $ readBlob repo $ toHex sha'
                         liftIO $ B.writeFile fullPath (getBlobContent $ fromJust content)
                         indexEntry <- asIndexEntry fullPath sha'

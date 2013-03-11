@@ -45,7 +45,7 @@ unpackPackfile (Packfile _ _ objs) = do
         liftIO $ forM_ unresolvedObjects $ writeDelta repo
         liftIO $ putStrLn "Done"
     where   writeObjects (x@(PackfileObject (OBJ_REF_DELTA _) _ _):xs) = liftM (x:) (writeObjects xs)
-            writeObjects ((PackfileObject objType _ content) :xs) = do
+            writeObjects (PackfileObject objType _ content : xs) = do
                 repo <- ask
                 _ <- liftIO $ writeBlob repo (tt objType) content
                 writeObjects xs
@@ -97,12 +97,12 @@ createRef :: String -> String -> WithRepository ()
 createRef ref sha = do
     repo <- ask
     let (path, name) = splitFileName ref
-        dir          = (getGitDirectory repo) </> path
+        dir          = getGitDirectory repo </> path
     _ <- liftIO $ createDirectoryIfMissing True dir
     liftIO $ writeFile (dir </> name) (sha ++ "\n")
 
 pathForPack :: GitRepository -> FilePath
-pathForPack repo = (getGitDirectory repo) </> "objects" </> "pack"
+pathForPack repo = getGitDirectory repo </> "objects" </> "pack"
 
 pathForObject :: String -> String -> (FilePath, String)
 pathForObject repoName sha | length sha == 40 = (repoName </> ".git" </> "objects" </> pre, rest)
@@ -132,7 +132,7 @@ readBlob GitRepository{..} sha = do
 -- sha1 $ header ++ content
 encodeBlob :: BlobType -> C.ByteString -> (ObjectId, C.ByteString)
 encodeBlob blobType content = do
-    let header       = headerForBlob (C.pack $ show $ blobType)
+    let header       = headerForBlob (C.pack $ show blobType)
         blob         = header `C.append` content
         sha1         = hsh blob
     (sha1, blob)

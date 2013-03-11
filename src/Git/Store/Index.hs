@@ -17,6 +17,7 @@ import Git.Common
 import Git.Store.ObjectStore                 (getGitDirectory)
 import Data.Char                             (ord)
 import System.FilePath
+import Data.Function                         (on)
 import Data.Word
 import Data.Bits
 import Data.Binary.Builder
@@ -100,21 +101,21 @@ instance Binary IndexEntry where
             put $ coerce uid'           -- 32-bit uid
             put $ coerce gid'           -- 32-bit gid
             put $ coerce size'          -- filesize, truncated to 32-bit
-            mapM put sha'               -- 160-bit SHA-1 for the represented object - [Word8]
+            mapM_ put sha'               -- 160-bit SHA-1 for the represented object - [Word8]
             put flags                   -- 16-bit
             mapM_ put finalPath          -- variable length - [Word8]
-        where zero = (0::Word32)
+        where zero = 0 :: Word32
               pathName              = name' -- ++ "\NUL"
               coerce  x             = (toEnum $ fromEnum x) :: Word32
-              toMode fm             = ((objType fm) `shiftL` 12) .|. permissions fm -- FIXME symlink and gitlink -> perm = 0
+              toMode fm             = (objType fm `shiftL` 12) .|. permissions fm -- FIXME symlink and gitlink -> perm = 0
               flags                 = (((toEnum . length $ pathName)::Word16) .&. 0xFFF) :: Word16 -- mask the 4 high order bits -- FIXME: length if the length is less than 0xFFF; otherwise 0xFFF is stored in this field.
               objType Regular       = 8         :: Word32     -- regular file     1000
               objType SymLink       = 10        :: Word32     -- symbolic link    1010
               objType GitLink       = 14        :: Word32     -- gitlink          1110
               permissions Regular   = 0o100644  :: Word32     -- FIXME mode -> 0755 if executable
-              permissions _         = 0         :: Word32     -- FIXME mode -> 0755 if executable
+              permissions _         = 0         :: Word32
               !finalPath            = let n     = CS.encode (pathName ++ "\0")
-                                          toPad = 8 - (((length n) - 2) `mod` 8)
+                                          toPad = 8 - ((length n - 2) `mod` 8)
                                           pad   = C.replicate toPad '\NUL'
                                           padded = if toPad /= 8 then n ++ B.unpack pad else n
                                       in padded
@@ -148,7 +149,7 @@ instance Binary IndexEntry where
 data GitFileMode = Regular | SymLink | GitLink deriving (Eq, Show)
 
 makeRelativeToRepoRoot :: String -> FilePath -> FilePath
-makeRelativeToRepoRoot repoName path = do
+makeRelativeToRepoRoot repoName path =
     joinPath $ dropWhile (== repoName) $ dirs path
     where dirs = splitDirectories . normalise
 
@@ -167,11 +168,11 @@ indexEntryFor filePath gitFileMode' sha' stat = do
 encodeIndex :: Index -> WithRepository B.ByteString
 encodeIndex toWrite = do
     let indexEntries = sortIndexEntries $ getIndexEntries toWrite
-        numEntries   = toEnum . fromEnum $ (length indexEntries)
+        numEntries   = toEnum . fromEnum $ length indexEntries
         header       = indexHeader numEntries
         entries      = mconcat $ map encode indexEntries
-        idx          = (toLazyByteString $ header) `L.append` entries
-    return $ (lazyToStrictBS idx) `B.append` SHA1.hashlazy idx
+        idx          = toLazyByteString header `L.append` entries
+    return $ lazyToStrictBS idx `B.append` SHA1.hashlazy idx
 
 {-
 Index entries are sorted in ascending order on the name field, interpreted as
@@ -180,7 +181,7 @@ casing of directory separator '/'). Entries with the same name are sorted by
 their stage field.
 -}
 sortIndexEntries :: [IndexEntry] -> [IndexEntry]
-sortIndexEntries = sortBy (\a b -> (name a) `compare` (name b))
+sortIndexEntries = sortBy (compare `on` name)
 
 
 lazyToStrictBS :: L.ByteString -> B.ByteString
@@ -189,13 +190,13 @@ lazyToStrictBS x = B.concat $ L.toChunks x
 writeIndex :: [IndexEntry] -> WithRepository ()
 writeIndex entries = do
     repo <- ask
-    let fullPath = (getGitDirectory repo) </> "index"
+    let fullPath = getGitDirectory repo </> "index"
     content <- encodeIndex $ Index entries
     liftIO $ B.writeFile fullPath content
 
 
 indexHeader :: Word32 -> Builder
-indexHeader num = do
+indexHeader num =
         putWord32be magic   -- The signature is { 'D', 'I', 'R', 'C' } (stands for "dircache")
         <> putWord32be 2       -- Version (2, 3 or 4, we use version 2)
         <> putWord32be num     -- Number of index entries
