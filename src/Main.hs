@@ -12,5 +12,6 @@ main = do
 
 run :: String -> [String] -> IO ()
 run "clone" (url:_) = clone url
+run "ls-remote" (url:_) = lsRemote url
 run _ _             = error "Unknown command or missing arguments"
 

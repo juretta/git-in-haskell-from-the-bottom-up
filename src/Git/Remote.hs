@@ -1,9 +1,8 @@
-{-# LANGUAGE OverloadedStrings, RecordWildCards #-}
-
--- FIXME implement ls-remote because we already have it anyway
+{-# LANGUAGE OverloadedStrings, BangPatterns, RecordWildCards #-}
 
 module Git.Remote(
     clone
+  , lsRemote
   , parseRemote
   , Remote(..)
 ) where
@@ -18,6 +17,7 @@ import Control.Monad.Reader                     (runReaderT)
 import System.Directory                         (removeFile, createDirectoryIfMissing)
 import System.FilePath                          ((</>), takeFileName, dropExtension)
 import Network.Socket                           (withSocketsDo)
+import Text.Printf
 import Data.Maybe
 import Data.List
 import Git.Common
@@ -27,7 +27,7 @@ import Git.Store.ObjectStore
 import Git.Repository
 
 refDiscovery :: String -> String -> String
-refDiscovery host repo = pktLine $ "git-upload-pack /" ++ repo ++ "\0host="++host++"\0" -- ++ flushPkt -- Tell the server to disconnect
+refDiscovery host repo = pktLine $ "git-upload-pack /" ++ repo ++ "\0host="++host++"\0"
 
 toObjId :: PacketLine -> Maybe String
 toObjId (FirstLine obj _ _) = Just $ C.unpack obj
@@ -82,6 +82,13 @@ clone url =
                        in clone' (GitRepository gitRepoName) remote
         _           -> putStrLn $ "Invalid URL" ++ url
 
+lsRemote :: String -> IO ()
+lsRemote url =
+    case parseRemote $ C.pack url of
+        Just remote -> do
+            packetLines <- lsRemote' remote
+            mapM_ (\line -> printf "%s\t%s\n" (C.unpack $ objId line) (C.unpack $ ref line)) packetLines
+        _           -> putStrLn $ "Invalid URL" ++ url
 
 -- .git/objects/pack/tmp_pack_6bo2La
 clone' :: GitRepository -> Remote -> IO ()
@@ -109,3 +116,15 @@ clone' repo Remote{..} = withSocketsDo $
         putStrLn "Checking out HEAD"
         _ <- runReaderT checkoutHead repo
         putStrLn "Finished"
+
+
+lsRemote' :: Remote -> IO [PacketLine]
+lsRemote' Remote{..} = withSocketsDo $
+    withConnection getHost (show $ fromMaybe 9418 getPort) $ \sock -> do
+        let payload = (refDiscovery getHost getRepository)
+        send sock payload
+        response <- receive sock
+        send sock flushPkt -- Tell the server to disconnect
+        return $ parsePacket $ L.fromChunks [response]
+
+
