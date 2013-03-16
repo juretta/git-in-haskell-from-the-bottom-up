@@ -1,4 +1,4 @@
-{-# LANGUAGE OverloadedStrings, DoAndIfThenElse #-}
+{-# LANGUAGE OverloadedStrings, DoAndIfThenElse, BangPatterns #-}
 
 -- | Convert a packfile (ByteString) into the internal "Packfile"
 -- representation.
@@ -81,7 +81,7 @@ parsePackObject = do
         initial     = fromIntegral $ byte .&. 15
     size' <- if isMsbSet byte then parseObjectSize initial 0 else return initial
     obj <- toPackObjectType objectType'
-    content <- I.joinI $ enumInflate Zlib defaultDecompressParams I.stream2stream
+    !content <- I.joinI $ enumInflate Zlib defaultDecompressParams I.stream2stream
     return $ (\t -> PackfileObject t size' content) <$> obj
 
 -- Parse the variable length size header part of the object entry
