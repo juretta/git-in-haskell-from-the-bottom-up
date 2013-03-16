@@ -50,7 +50,7 @@ data TreeEntry = TreeEntry {
 
 data Commit = Commit {
     getTree        :: B.ByteString
-  , getParent      :: Maybe B.ByteString
+  , getParents     :: [B.ByteString]
   , getSha         :: B.ByteString
   , getAuthor      :: Author
   , getCommiter    :: Commiter
@@ -137,20 +137,20 @@ commitParser :: Parser Commit
 commitParser = do
     tree <- "tree " .*> take 40
     space
-    maybeParent <- option Nothing parseParentCommit
+    parents <- many' parseParentCommit
     author <- "author " .*> parsePerson
     space
     _commiter <- "committer " .*> parsePerson
     space
     space
     message <- takeByteString
-    return $ Commit tree maybeParent B.empty (Author (getPersonName author) (getPersonEmail author)) (Commiter "" "") message -- FIXME Use Commiter
+    return $ Commit tree parents B.empty (Author (getPersonName author) (getPersonEmail author)) (Commiter "" "") message -- FIXME Use Commiter
 
-parseParentCommit :: Parser (Maybe C.ByteString)
+parseParentCommit :: Parser C.ByteString
 parseParentCommit = do
    parent <- "parent " .*> take 40
    space
-   return $ Just parent
+   return parent
 
 parsePerson :: Parser Person
 parsePerson = do
