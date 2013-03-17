@@ -53,10 +53,16 @@ openConnection host port = do
 -- | Read a packet line
 readPacketLine :: Socket -> IO (Maybe C.ByteString)
 readPacketLine sock = do
-    msg <- recv sock 4 -- check for a zero length return -> disconnected
-    if C.null msg then return Nothing else
-        case readHex $ C.unpack msg of
-            ((l,_):_) | l > 4 -> do
-                 line <- recv sock (l-4)
-                 return $ Just line
-            _ -> return Nothing
+        msg <- loop C.empty 4 -- check for a zero length return -> disconnected
+        if C.null msg then return Nothing else
+            case readHex $ C.unpack msg of
+                ((l,_):_) | l > 4 -> do
+                     line <- loop C.empty (l-4)
+                     return $ Just line
+                _ -> return Nothing
+    where loop acc expected = do
+            line <- recv sock expected
+            let len  = C.length line
+                acc' = acc `C.append` line
+                cont = len /= expected && not (C.null line)
+            if cont then loop acc' (expected - len) else return acc'
