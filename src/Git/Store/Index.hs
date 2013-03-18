@@ -89,38 +89,38 @@ struct cache_entry {
 };
 -}
 instance Binary IndexEntry where
-    put (IndexEntry cs ms dev inode' _mode' uid' gid' size' sha' gitFileMode' name')
+    put (IndexEntry cs ms dev inode' mode' uid' gid' size' sha' gitFileMode' name')
         = do
-            put $ coerce cs             -- 32-bit ctime seconds
-            put zero                    -- 32-bit ctime nanosecond fractions
-            put $ coerce ms             -- 32-bit mtime seconds
-            put zero                    -- 32-bit mtime nanosecond fractions
-            put $ coerce dev            -- 32-bit dev
-            put $ coerce inode'         -- 32-bit ino
-            put $ toMode gitFileMode'   -- 32-bit mode, see below
-            put $ coerce uid'           -- 32-bit uid
-            put $ coerce gid'           -- 32-bit gid
-            put $ coerce size'          -- filesize, truncated to 32-bit
-            mapM_ put sha'               -- 160-bit SHA-1 for the represented object - [Word8]
-            put flags                   -- 16-bit
+            put $ coerce cs                     -- 32-bit ctime seconds
+            put zero                            -- 32-bit ctime nanosecond fractions
+            put $ coerce ms                     -- 32-bit mtime seconds
+            put zero                            -- 32-bit mtime nanosecond fractions
+            put $ coerce dev                    -- 32-bit dev
+            put $ coerce inode'                 -- 32-bit ino
+            put $ toMode gitFileMode' mode'     -- 32-bit mode, see below
+            put $ coerce uid'                   -- 32-bit uid
+            put $ coerce gid'                   -- 32-bit gid
+            put $ coerce size'                  -- filesize, truncated to 32-bit
+            mapM_ put sha'                      -- 160-bit SHA-1 for the represented object - [Word8]
+            put flags                           -- 16-bit
             mapM_ put finalPath          -- variable length - [Word8]
         where zero = 0 :: Word32
-              pathName              = name' -- ++ "\NUL"
-              coerce  x             = (toEnum $ fromEnum x) :: Word32
-              toMode fm             = (objType fm `shiftL` 12) .|. permissions fm -- FIXME symlink and gitlink -> perm = 0
-              flags                 = (((toEnum . length $ pathName)::Word16) .&. 0xFFF) :: Word16 -- mask the 4 high order bits -- FIXME: length if the length is less than 0xFFF; otherwise 0xFFF is stored in this field.
-              objType Regular       = 8         :: Word32     -- regular file     1000
-              objType SymLink       = 10        :: Word32     -- symbolic link    1010
-              objType GitLink       = 14        :: Word32     -- gitlink          1110
-              permissions Regular   = 0o100644  :: Word32     -- FIXME mode -> 0755 if executable
-              permissions _         = 0         :: Word32
-              !finalPath            = let n     = CS.encode (pathName ++ "\0")
-                                          toPad = 8 - ((length n - 2) `mod` 8)
-                                          pad   = C.replicate toPad '\NUL'
-                                          padded = if toPad /= 8 then n ++ B.unpack pad else n
-                                      in padded
-                                      -- FIXME - pathname must contain the full
-                                      -- path relative to root!
+              pathName                  = name' -- ++ "\NUL"
+              coerce  x                 = (toEnum $ fromEnum x) :: Word32
+              toMode gfm fm             = (objType gfm `shiftL` 12) .|. permissions gfm fm
+              flags                     = (((toEnum . length $ pathName)::Word16) .&. 0xFFF) :: Word16 -- mask the 4 high order bits -- FIXME: length if the length is less than 0xFFF; otherwise 0xFFF is stored in this field.
+              objType Regular           = 8         :: Word32     -- regular file     1000
+              objType SymLink           = 10        :: Word32     -- symbolic link    1010
+              objType GitLink           = 14        :: Word32     -- gitlink          1110
+              permissions Regular fm    = (fromIntegral fm) :: Word32     -- 0o100755 or 0o100644
+              permissions _ _           = 0         :: Word32
+              !finalPath                = let n     = CS.encode (pathName ++ "\0")
+                                              toPad = 8 - ((length n - 2) `mod` 8)
+                                              pad   = C.replicate toPad '\NUL'
+                                              padded = if toPad /= 8 then n ++ B.unpack pad else n
+                                          in padded
+                                          -- FIXME - pathname must contain the full
+                                          -- path relative to root!
     get = undefined
 {-
 #define S_IFLNK    0120000 /* Symbolic link */

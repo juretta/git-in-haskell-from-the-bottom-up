@@ -18,6 +18,7 @@ import System.Directory
 import Data.Char                                            (isSpace)
 import System.Posix.Files
 import Control.Monad.Reader
+import Numeric                                              (readOct)
 
 -- | Updates files in the working tree to match the given <tree-ish>
 
@@ -41,12 +42,14 @@ walkTree acc parent tree = do
                                 liftIO $ createDirectory dir
                                 maybeTree <- resolveTree $ toHex sha'
                                 maybe (return acc') (walkTree acc' dir) maybeTree
-          handleEntry acc' (TreeEntry _mode path sha') = do
+          handleEntry acc' (TreeEntry mode path sha') = do
                         repo <- ask
                         let fullPath = parent </> toFilePath path
                         content <- liftIO $ readBlob repo $ toHex sha'
                         maybe (return acc') (\e -> do
                                 liftIO $ B.writeFile fullPath (getBlobContent e)
+                                let fMode = fst . head . readOct $ C.unpack mode
+                                liftIO $ setFileMode fullPath fMode
                                 indexEntry <- asIndexEntry fullPath sha'
                                 return $ indexEntry : acc') content
           toFilePath = C.unpack
