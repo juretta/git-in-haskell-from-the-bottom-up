@@ -188,6 +188,7 @@ lazyToStrictBS :: L.ByteString -> B.ByteString
 lazyToStrictBS x = B.concat $ L.toChunks x
 
 writeIndex :: [IndexEntry] -> WithRepository ()
+writeIndex [] = return ()
 writeIndex entries = do
     repo <- ask
     let fullPath = getGitDirectory repo </> "index"
