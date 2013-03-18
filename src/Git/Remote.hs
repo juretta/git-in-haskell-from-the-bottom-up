@@ -93,12 +93,12 @@ lsRemote url =
 -- .git/objects/pack/tmp_pack_6bo2La
 clone' :: GitRepository -> Remote -> IO ()
 clone' repo remote@Remote{..} = do
-        packFile <- receivePack remote
+        (refs,packFile) <- receivePack remote
         let dir = pathForPack repo
             tmpPack = dir </> "tmp_pack_incoming"
         _ <- createDirectoryIfMissing True dir
         B.writeFile tmpPack packFile
-        _ <- runReaderT (createGitRepositoryFromPackfile tmpPack) repo
+        _ <- runReaderT (createGitRepositoryFromPackfile tmpPack refs) repo
         removeFile tmpPack
         putStrLn "Checking out HEAD"
         _ <- runReaderT checkoutHead repo
@@ -115,7 +115,7 @@ lsRemote' Remote{..} = withSocketsDo $
         return $ parsePacket $ L.fromChunks [response]
 
 
-receivePack :: Remote -> IO B.ByteString
+receivePack :: Remote -> IO ([Ref], B.ByteString)
 receivePack Remote{..} = withSocketsDo $
     withConnection getHost (show $ fromMaybe 9418 getPort) $ \sock -> do
         let payload = refDiscovery getHost getRepository
@@ -131,4 +131,4 @@ receivePack Remote{..} = withSocketsDo $
         -- FIXME - response might contain more packet lines
         !rawPack <- receiveFully sock
         putStrLn "Received pack file"
-        return $ B.drop 8 rawPack
+        return (mapMaybe toRef pack, B.drop 8 rawPack)

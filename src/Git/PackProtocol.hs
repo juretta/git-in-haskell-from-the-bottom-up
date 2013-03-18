@@ -2,7 +2,9 @@
 
 module Git.PackProtocol(
     parsePacket
+  , toRef
   , PacketLine(..)
+  , Ref(..)
 ) where
 
 
@@ -14,6 +16,11 @@ import Data.Attoparsec.Combinator
 import Data.Attoparsec.Char8 hiding (char, space, take)
 import Data.Maybe
 
+data Ref = Ref {
+    getObjId        :: C.ByteString
+  , getRefName      :: C.ByteString
+} deriving (Show, Eq)
+
 data PacketLine = FirstLine {
     objId           :: C.ByteString
    ,ref             :: C.ByteString
@@ -24,6 +31,12 @@ data PacketLine = FirstLine {
 } | NullLine {
     zeroId          :: C.ByteString
 } deriving (Show, Eq)
+
+toRef :: PacketLine -> Maybe Ref
+toRef (FirstLine oId r _)   = Just (Ref oId r)
+toRef (RefLine oId r)       = Just (Ref oId r)
+toRef _                     = Nothing
+
 
 parsePacket :: L.ByteString -> [PacketLine]
 parsePacket line = fromMaybe [] $ AL.maybeResult $ AL.parse parseLines line

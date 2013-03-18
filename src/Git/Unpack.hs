@@ -21,6 +21,6 @@ unpack' repo packFile = do
         putStrLn $ "Creating directory: " ++ show dir
         _ <- createDirectoryIfMissing True dir
         putStrLn $ "Create git repo from pack file: " ++ show packFile
-        _ <- runReaderT (createGitRepositoryFromPackfile packFile) repo
+        _ <- runReaderT (createGitRepositoryFromPackfile packFile []) repo
         putStrLn "Finished"
 

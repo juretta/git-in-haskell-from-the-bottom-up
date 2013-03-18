@@ -18,23 +18,26 @@ import qualified Data.ByteString.Lazy as L
 import qualified Codec.Compression.Zlib as Z
 import qualified Crypto.Hash.SHA1 as SHA1
 -- FIXME -> don't use isJust/fromJust
-import Data.Maybe                                           (isJust, fromJust)
+import Data.Maybe                                           (isJust, fromJust, isNothing)
 import Text.Printf                                          (printf)
 import Git.Pack.Packfile
 import Git.Pack.Delta                                       (patch)
 import Git.Common                                           (GitRepository(..), ObjectId, WithRepository)
+import Git.PackProtocol                                     (Ref(..))
 -- Tree
 import Git.Store.Blob
 import System.FilePath
 import System.Directory
 import Data.Foldable                                        (forM_)
+import Data.List                                            (find)
 import Control.Monad.Reader hiding (forM_)
 
-createGitRepositoryFromPackfile :: FilePath -> WithRepository ()
-createGitRepositoryFromPackfile packFile = do
+createGitRepositoryFromPackfile :: FilePath -> [Ref] -> WithRepository ()
+createGitRepositoryFromPackfile packFile refs = do
     pack <- liftIO $ packRead packFile
     unpackPackfile pack
-    updateHead pack
+    createRefs refs
+    updateHead refs
 
 -- TODO properly handle the error condition here
 unpackPackfile :: Packfile -> WithRepository ()
@@ -72,19 +75,20 @@ unpackPackfile (Packfile _ _ objs) = do
             writeDelta _repo _ = error "Don't expect a resolved object here"
 
 
-updateHead :: Packfile -> WithRepository ()
-updateHead InvalidPackfile = error "Unexpected invalid packfile"
-updateHead (Packfile _ _ objs) = do
-    let commits = filter isCommit objs
-    unless (null commits) $
-        let commit = head commits
-            ref = "refs/heads/master"
+updateHead :: [Ref] -> WithRepository ()
+updateHead [] = fail "Unexpected invalid packfile"
+updateHead refs = do
+    let maybeHead = findHead refs
+    unless (isNothing maybeHead) $
+        let sha1 = C.unpack $ getObjId $ fromJust maybeHead
+            ref = maybe "refs/heads/master" (C.unpack . getRefName) $ findRef sha1 refs
             in
             do
-                let (sha1, _) = encodeBlob BCommit (objectData commit)
                 createRef ref sha1
                 createSymRef "HEAD" ref
     where isCommit ob = objectType ob == OBJ_COMMIT
+          findHead = find (\Ref{..} -> "HEAD" == getRefName)
+          findRef sha = find (\Ref{..} -> ("HEAD" /= getRefName && sha == (C.unpack getObjId)))
 
 -- ref: refs/heads/master
 createSymRef :: String -> String -> WithRepository ()
@@ -93,13 +97,6 @@ createSymRef symName ref = do
         liftIO $ writeFile (getGitDirectory repo </> symName) $ "ref: " ++ ref ++ "\n"
 
 
-createRef :: String -> String -> WithRepository ()
-createRef ref sha = do
-    repo <- ask
-    let (path, name) = splitFileName ref
-        dir          = getGitDirectory repo </> path
-    _ <- liftIO $ createDirectoryIfMissing True dir
-    liftIO $ writeFile (dir </> name) (sha ++ "\n")
 
 pathForPack :: GitRepository -> FilePath
 pathForPack repo = getGitDirectory repo </> "objects" </> "pack"
@@ -150,9 +147,6 @@ writeBlob GitRepository{..} blobType content = do
     where compress data' = Z.compress $ L.fromChunks [data'] -- FIXME should data be lazy in the first place?
 
 
-
-
-
 createEmptyGitRepository :: FilePath -> IO ()
 createEmptyGitRepository gitDir =
         mapM_ (\dir -> createDirectoryIfMissing True (gitDir </> dir)) topLevelDirectories
@@ -168,3 +162,19 @@ toHex bytes = C.unpack bytes >>= printf "%02x"
 getGitDirectory :: GitRepository -> FilePath
 getGitDirectory = (</> ".git") . getName
 
+createRefs :: [Ref] -> WithRepository ()
+createRefs refs = do
+    writeRefs "refs/remotes/origin" $ filterTags refs
+    writeRefs "refs/tags" $ tags refs
+    where simpleRefName  = head . reverse . C.split '/'
+          filterTags     = filter (not . C.isPrefixOf "refs/tags" . getRefName)
+          tags           = filter (\e -> (not . C.isSuffixOf "^{}" $ getRefName e) && (C.isPrefixOf "refs/tags" $ getRefName e))
+          writeRefs refSpace     = mapM_ (\Ref{..} -> createRef (refSpace ++ "/" ++ (C.unpack . simpleRefName $ getRefName)) (C.unpack getObjId)) 
+
+createRef :: String -> String -> WithRepository ()
+createRef ref sha = do
+    repo <- ask
+    let (path, name) = splitFileName ref
+        dir          = getGitDirectory repo </> path
+    _ <- liftIO $ createDirectoryIfMissing True dir
+    liftIO $ writeFile (dir </> name) (sha ++ "\n")
