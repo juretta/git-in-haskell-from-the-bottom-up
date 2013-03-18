@@ -8,8 +8,6 @@ module Git.Repository (
 
 import qualified Data.ByteString.Char8 as C
 import qualified Data.ByteString as B
--- FIXME -> don't use isJust/fromJust
-import Data.Maybe                                           (fromJust)
 import Text.Printf                                          (printf)
 import Git.Common                                           (GitRepository(..), ObjectId, WithRepository)
 import Git.Store.Blob
@@ -29,10 +27,11 @@ checkoutHead = do
     let dir = getName repo
     tip <- readHead
     maybeTree <- resolveTree tip
-    indexEntries <- walkTree [] dir $ fromJust maybeTree
+    indexEntries <- maybe (return []) (walkTree [] dir) maybeTree
     writeIndex indexEntries
-    return ()
 
+-- TODO Improve error handling: Should return an error instead of
+-- of implicitly skipping erroneous elements.
 walkTree :: [IndexEntry] -> FilePath -> Tree -> WithRepository [IndexEntry]
 walkTree acc parent tree = do
     let entries = getEntries tree
@@ -41,14 +40,15 @@ walkTree acc parent tree = do
                                 let dir = parent </> toFilePath path
                                 liftIO $ createDirectory dir
                                 maybeTree <- resolveTree $ toHex sha'
-                                walkTree acc' dir $ fromJust maybeTree
+                                maybe (return acc') (walkTree acc' dir) maybeTree
           handleEntry acc' (TreeEntry _mode path sha') = do
                         repo <- ask
                         let fullPath = parent </> toFilePath path
                         content <- liftIO $ readBlob repo $ toHex sha'
-                        liftIO $ B.writeFile fullPath (getBlobContent $ fromJust content)
-                        indexEntry <- asIndexEntry fullPath sha'
-                        return $ indexEntry : acc'
+                        maybe (return acc') (\e -> do
+                                liftIO $ B.writeFile fullPath (getBlobContent e)
+                                indexEntry <- asIndexEntry fullPath sha'
+                                return $ indexEntry : acc') content
           toFilePath = C.unpack
           asIndexEntry path sha' = do
                 stat <- liftIO $ getFileStatus path
@@ -60,14 +60,14 @@ resolveTree :: ObjectId -> WithRepository (Maybe Tree)
 resolveTree sha' = do
         repo <- ask
         blob <- liftIO $ readBlob repo sha' -- readBlob :: GitRepository -> ObjectId -> IO (Maybe Blob)
-        walk $ fromJust blob -- fmap walk blob
+        maybe (return Nothing) walk blob
     where walk  (Blob _ BTree sha1)                = do
                                                       repo <- ask
                                                       liftIO $ readTree repo sha1
           walk  c@(Blob _ BCommit _)               = do
                                                         let maybeCommit = parseCommit $ getBlobContent c
-                                                        extractTree $ fromJust maybeCommit
-          walk _                                       = error "Urgh"
+                                                        maybe (return Nothing) extractTree maybeCommit
+          walk _                                   = return Nothing
 
 extractTree :: Commit -> WithRepository (Maybe Tree)
 extractTree commit = do
