@@ -92,22 +92,9 @@ lsRemote url =
 
 -- .git/objects/pack/tmp_pack_6bo2La
 clone' :: GitRepository -> Remote -> IO ()
-clone' repo Remote{..} = withSocketsDo $
-    withConnection getHost (show $ fromMaybe 9418 getPort) $ \sock -> do
-        let payload = refDiscovery getHost getRepository
-        send sock payload
-        putStrLn "Receiving..."
-        response <- receive sock
-        let pack = parsePacket $ L.fromChunks [response]
-            --wants = map toObjId pack
-        let request = createNegotiationRequest ["multi_ack_detailed", "agent=git/1.8.1"] pack ++ flushPkt ++ "0009done\n"
-        {-let request = (createNegotiationRequest ["multi_ack_detailed", "side-band-64k", "thin-pack", "ofs-delta", "agent=git/1.8.1"] pack) ++ flushPkt ++ "0009done\n"-}
-        send sock request
-        response2 <- receiveFully sock
-        putStrLn "Received bytes:"
-        print $ B.length response2
-        let packFile = B.drop 8 response2
-            dir = pathForPack repo
+clone' repo remote@Remote{..} = do
+        packFile <- receivePack remote
+        let dir = pathForPack repo
             tmpPack = dir </> "tmp_pack_incoming"
         _ <- createDirectoryIfMissing True dir
         B.writeFile tmpPack packFile
@@ -121,10 +108,27 @@ clone' repo Remote{..} = withSocketsDo $
 lsRemote' :: Remote -> IO [PacketLine]
 lsRemote' Remote{..} = withSocketsDo $
     withConnection getHost (show $ fromMaybe 9418 getPort) $ \sock -> do
-        let payload = (refDiscovery getHost getRepository)
+        let payload = refDiscovery getHost getRepository
         send sock payload
         response <- receive sock
         send sock flushPkt -- Tell the server to disconnect
         return $ parsePacket $ L.fromChunks [response]
 
 
+receivePack :: Remote -> IO B.ByteString
+receivePack Remote{..} = withSocketsDo $
+    withConnection getHost (show $ fromMaybe 9418 getPort) $ \sock -> do
+        let payload = refDiscovery getHost getRepository
+        send sock payload
+        putStrLn "Receiving..."
+        response <- receive sock
+        let pack    = parsePacket $ L.fromChunks [response]
+            request = createNegotiationRequest ["multi_ack_detailed", "agent=git/1.8.1"] pack ++ flushPkt ++ "0009done\n"
+        {-let request = (createNegotiationRequest ["multi_ack_detailed", "side-band-64k", "thin-pack", "ofs-delta", "agent=git/1.8.1"] pack) ++ flushPkt ++ "0009done\n"-}
+        putStrLn $ "Sending ref netgotiation request"
+        send sock request
+        putStrLn "Receiving pack file response"
+        -- FIXME - response might contain more packet lines
+        !rawPack <- receiveFully sock
+        putStrLn "Received pack file"
+        return $ B.drop 8 rawPack
