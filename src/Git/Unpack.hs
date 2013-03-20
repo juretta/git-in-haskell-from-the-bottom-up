@@ -1,7 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
 
--- FIXME implement ls-remote because we already have it anyway
-
 module Git.Unpack(
     unpack
 ) where

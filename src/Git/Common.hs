@@ -1,4 +1,4 @@
--- | Common functions used throught the Git module.
+-- | Common functions used throughout the Git module.
 module Git.Common (
     toHex
   , pktLine
