@@ -40,11 +40,14 @@ toObjId _                   = Nothing
 --
 -- FIXME - filter heads/tags
 createNegotiationRequest :: [String] -> [PacketLine] -> String
-createNegotiationRequest capabilities = concatMap (++ "") . nub . map (pktLine . (++ "\n")) . foldl' (\acc e -> if null acc then first acc e else additional acc e) [] . wants . filter filterPeeledTags
+createNegotiationRequest capabilities = concatMap (++ "") . nub . map (pktLine . (++ "\n")) . foldl' (\acc e -> if null acc then first acc e else additional acc e) [] . wants . filter filterPeeledTags . filter filterRefs
                     where wants              = mapMaybe toObjId
                           first acc obj      = acc ++ ["want " ++ obj ++ " " ++ unwords capabilities]
                           additional acc obj = acc ++ ["want " ++ obj]
                           filterPeeledTags   = not . isSuffixOf "^{}" . C.unpack . ref
+                          filterRefs line    = let r = C.unpack $ ref line
+                                                   predicates = map ($ r) [isPrefixOf "refs/tags/", isPrefixOf "refs/heads/"]
+                                               in any id predicates
 
 data Remote = Remote {
     getHost         :: String
