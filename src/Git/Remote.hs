@@ -25,6 +25,7 @@ import Git.TcpClient
 import Git.PackProtocol
 import Git.Store.ObjectStore
 import Git.Repository
+import System.IO                                (hPutStr, stderr, hFlush)
 
 refDiscovery :: String -> String -> String
 refDiscovery host repo = pktLine $ "git-upload-pack /" ++ repo ++ "\0host="++host++"\0"
@@ -107,7 +108,6 @@ clone' repo remote@Remote{..} = do
         _ <- runReaderT checkoutHead repo
         putStrLn "Finished"
 
-
 lsRemote' :: Remote -> IO [PacketLine]
 lsRemote' Remote{..} = withSocketsDo $
     withConnection getHost (show $ fromMaybe 9418 getPort) $ \sock -> do
@@ -126,12 +126,16 @@ receivePack Remote{..} = withSocketsDo $
         putStrLn "Receiving..."
         response <- receive sock
         let pack    = parsePacket $ L.fromChunks [response]
-            request = createNegotiationRequest ["multi_ack_detailed", "agent=git/1.8.1"] pack ++ flushPkt ++ "0009done\n"
-        {-let request = (createNegotiationRequest ["multi_ack_detailed", "side-band-64k", "thin-pack", "ofs-delta", "agent=git/1.8.1"] pack) ++ flushPkt ++ "0009done\n"-}
+            request = createNegotiationRequest ["multi_ack_detailed", "side-band-64k", "agent=git/1.8.1"] pack ++ flushPkt ++ (pktLine "done\n")
         putStrLn $ "Sending ref netgotiation request"
         send sock request
         putStrLn "Receiving pack file response"
         -- FIXME - response might contain more packet lines
-        !rawPack <- receiveFully sock
+        !rawPack <- receiveWithSideband sock (printSideband . C.unpack)
+        -- !rawPack <- receiveFully sock
         putStrLn "Received pack file"
-        return (mapMaybe toRef pack, B.drop 8 rawPack)
+        -- return (mapMaybe toRef pack, B.drop 8 rawPack)
+        return (mapMaybe toRef pack, rawPack)
+    where printSideband str = do
+                        hPutStr stderr str
+                        hFlush stderr
