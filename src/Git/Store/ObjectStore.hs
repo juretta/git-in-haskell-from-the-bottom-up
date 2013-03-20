@@ -46,7 +46,6 @@ unpackPackfile (Packfile _ _ objs) = do
         repo <- ask
         unresolvedObjects <- writeObjects objs
         liftIO $ forM_ unresolvedObjects $ writeDelta repo
-        liftIO $ putStrLn "Done"
     where   writeObjects (x@(PackfileObject (OBJ_REF_DELTA _) _ _):xs) = liftM (x:) (writeObjects xs)
             writeObjects (PackfileObject objType _ content : xs) = do
                 repo <- ask

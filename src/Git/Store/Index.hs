@@ -112,7 +112,7 @@ instance Binary IndexEntry where
               objType Regular           = 8         :: Word32     -- regular file     1000
               objType SymLink           = 10        :: Word32     -- symbolic link    1010
               objType GitLink           = 14        :: Word32     -- gitlink          1110
-              permissions Regular fm    = (fromIntegral fm) :: Word32     -- 0o100755 or 0o100644
+              permissions Regular fm    = fromIntegral fm :: Word32     -- 0o100755 or 0o100644
               permissions _ _           = 0         :: Word32
               !finalPath                = let n     = CS.encode (pathName ++ "\0")
                                               toPad = 8 - ((length n - 2) `mod` 8)

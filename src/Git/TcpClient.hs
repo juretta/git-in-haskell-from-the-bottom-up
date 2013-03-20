@@ -49,7 +49,7 @@ receiveWithSideband sock f = recrec mempty
                 Just "NAK\n" -> skip -- ignore here...
                 Just line -> case B.uncons line of
                                 Just (1, rest)  -> recrec (acc `mappend` rest)
-                                Just (2, rest)  -> (f $ "remote: " `C.append` rest) >> skip -- FIXME - scan for linebreaks and prepend "remote: " accordingly (see sideband.c)
+                                Just (2, rest)  -> f ("remote: " `C.append` rest) >> skip -- FIXME - scan for linebreaks and prepend "remote: " accordingly (see sideband.c)
                                 Just (_, rest)  -> fail $ C.unpack rest
                                 Nothing         -> skip
                 Nothing   -> return acc

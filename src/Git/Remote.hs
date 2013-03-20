@@ -48,7 +48,7 @@ createNegotiationRequest capabilities = concatMap (++ "") . nub . map (pktLine .
                           filterPeeledTags   = not . isSuffixOf "^{}" . C.unpack . ref
                           filterRefs line    = let r = C.unpack $ ref line
                                                    predicates = map ($ r) [isPrefixOf "refs/tags/", isPrefixOf "refs/heads/"]
-                                               in any id predicates
+                                               in or predicates
 
 data Remote = Remote {
     getHost         :: String
@@ -104,9 +104,7 @@ clone' repo remote@Remote{..} = do
         B.writeFile tmpPack packFile
         _ <- runReaderT (createGitRepositoryFromPackfile tmpPack refs) repo
         removeFile tmpPack
-        putStrLn "Checking out HEAD"
-        _ <- runReaderT checkoutHead repo
-        putStrLn "Finished"
+        runReaderT checkoutHead repo
 
 lsRemote' :: Remote -> IO [PacketLine]
 lsRemote' Remote{..} = withSocketsDo $
@@ -123,18 +121,13 @@ receivePack Remote{..} = withSocketsDo $
     withConnection getHost (show $ fromMaybe 9418 getPort) $ \sock -> do
         let payload = refDiscovery getHost getRepository
         send sock payload
-        putStrLn "Receiving..."
         response <- receive sock
         let pack    = parsePacket $ L.fromChunks [response]
-            request = createNegotiationRequest ["multi_ack_detailed", "side-band-64k", "agent=git/1.8.1"] pack ++ flushPkt ++ (pktLine "done\n")
-        putStrLn $ "Sending ref netgotiation request"
+            request = createNegotiationRequest ["multi_ack_detailed",
+                        "side-band-64k",
+                        "agent=git/1.8.1"] pack ++ flushPkt ++ pktLine "done\n"
         send sock request
-        putStrLn "Receiving pack file response"
-        -- FIXME - response might contain more packet lines
         !rawPack <- receiveWithSideband sock (printSideband . C.unpack)
-        -- !rawPack <- receiveFully sock
-        putStrLn "Received pack file"
-        -- return (mapMaybe toRef pack, B.drop 8 rawPack)
         return (mapMaybe toRef pack, rawPack)
     where printSideband str = do
                         hPutStr stderr str
