@@ -6,7 +6,7 @@ module Git.RemoteTests
   ) where
 
 import qualified Test.HUnit as H
-import Git.Remote
+import Git.Remote.Operations
 import Test.QuickCheck hiding ((.&.))
 import Test.Framework (Test, defaultMain, testGroup)
 import Test.Framework.Providers.QuickCheck2 (testProperty)

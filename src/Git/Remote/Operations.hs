@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings, BangPatterns, RecordWildCards #-}
 
-module Git.Remote(
+module Git.Remote.Operations (
     clone
   , lsRemote
   , parseRemote
@@ -22,8 +22,8 @@ import Text.Printf
 import Data.Maybe
 import Data.List
 import Git.Common
-import Git.TcpClient
-import Git.PackProtocol
+import Git.Remote.TcpClient
+import Git.Remote.PackProtocol
 import Git.Store.ObjectStore
 import Git.Repository
 

@@ -1,10 +1,9 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module Git.PackProtocol(
+module Git.Remote.PackProtocol (
     parsePacket
   , toRef
   , PacketLine(..)
-  , Ref(..)
 ) where
 
 
@@ -15,11 +14,7 @@ import qualified Data.ByteString.Lazy.Char8 as L
 import Data.Attoparsec.Combinator
 import Data.Attoparsec.Char8 hiding (char, space, take)
 import Data.Maybe
-
-data Ref = Ref {
-    getObjId        :: C.ByteString
-  , getRefName      :: C.ByteString
-} deriving (Show, Eq)
+import Git.Common                   (Ref(..))
 
 data PacketLine = FirstLine {
     objId           :: C.ByteString

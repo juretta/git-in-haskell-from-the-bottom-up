@@ -1,7 +1,7 @@
 {-# LANGUAGE OverloadedStrings, ScopedTypeVariables, BangPatterns #-}
 
 -- | A git compatible TcpClient that understands the git packet line format.
-module Git.TcpClient (
+module Git.Remote.TcpClient (
    withConnection
  , send
  , receiveWithSideband

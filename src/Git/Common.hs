@@ -6,11 +6,13 @@ module Git.Common (
   , isMsbSet
   , eitherToMaybe
   , GitRepository(..)
+  , Ref(..)
   , ObjectId
   , WithRepository
   , fromOctets
 ) where
 
+import qualified Data.ByteString.Char8 as C
 import Control.Monad.Reader
 import Text.Printf      (printf)
 import Numeric          (showHex)
@@ -20,6 +22,11 @@ import Data.Word
 type ObjectId = String
 
 type WithRepository = ReaderT GitRepository IO
+
+data Ref = Ref {
+    getObjId        :: C.ByteString
+  , getRefName      :: C.ByteString
+} deriving (Show, Eq)
 
 data GitRepository = GitRepository {
     getName         :: String

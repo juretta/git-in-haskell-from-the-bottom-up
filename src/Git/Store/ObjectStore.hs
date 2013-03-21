@@ -22,8 +22,7 @@ import Data.Maybe                                           (isJust, fromJust, i
 import Text.Printf                                          (printf)
 import Git.Pack.Packfile
 import Git.Pack.Delta                                       (patch)
-import Git.Common                                           (GitRepository(..), ObjectId, WithRepository)
-import Git.PackProtocol                                     (Ref(..))
+import Git.Common                                           (GitRepository(..), ObjectId, WithRepository, Ref(..))
 -- Tree
 import Git.Store.Blob
 import System.FilePath

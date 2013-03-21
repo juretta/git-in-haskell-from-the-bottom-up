@@ -1,8 +1,8 @@
 module Main where
 
-import System.Environment   (getArgs)
-import Data.Maybe           (listToMaybe)
-import Git.Remote
+import System.Environment       (getArgs)
+import Data.Maybe               (listToMaybe)
+import Git.Remote.Operations
 import Git.Unpack
 
 main :: IO ()
