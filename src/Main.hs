@@ -1,6 +1,7 @@
 module Main where
 
-import System.Environment (getArgs)
+import System.Environment   (getArgs)
+import Data.Maybe           (listToMaybe)
 import Git.Remote
 import Git.Unpack
 
@@ -12,8 +13,8 @@ main = do
         _           -> error "Missing command"
 
 run :: String -> [String] -> IO ()
-run "clone" (url:_) = clone url
-run "ls-remote" (url:_) = lsRemote url
-run "unpack" (name:file:_) = unpack name file
-run _ _             = error "Unknown command or missing arguments"
+run "clone" (url:xs)        = clone url $ listToMaybe xs
+run "ls-remote" (url:_)     = lsRemote url
+run "unpack" (name:file:_)  = unpack name file
+run _ _                     = error "Unknown command or missing arguments"
 

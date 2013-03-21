@@ -17,6 +17,7 @@ import Control.Monad.Reader                     (runReaderT)
 import System.Directory                         (removeFile, createDirectoryIfMissing)
 import System.FilePath                          ((</>), takeFileName, dropExtension)
 import Network.Socket                           (withSocketsDo)
+import System.IO                                (hPutStr, stderr, hFlush)
 import Text.Printf
 import Data.Maybe
 import Data.List
@@ -25,30 +26,6 @@ import Git.TcpClient
 import Git.PackProtocol
 import Git.Store.ObjectStore
 import Git.Repository
-import System.IO                                (hPutStr, stderr, hFlush)
-
-refDiscovery :: String -> String -> String
-refDiscovery host repo = pktLine $ "git-upload-pack /" ++ repo ++ "\0host="++host++"\0"
-
-toObjId :: PacketLine -> Maybe String
-toObjId (FirstLine obj _ _) = Just $ C.unpack obj
-toObjId (RefLine obj _)     = Just $ C.unpack obj
-toObjId _                   = Nothing
-
-
--- PKT-LINE("want" SP obj-id SP capability-list LF)
--- PKT-LINE("want" SP obj-id LF)
---
--- FIXME - filter heads/tags
-createNegotiationRequest :: [String] -> [PacketLine] -> String
-createNegotiationRequest capabilities = concatMap (++ "") . nub . map (pktLine . (++ "\n")) . foldl' (\acc e -> if null acc then first acc e else additional acc e) [] . wants . filter filterPeeledTags . filter filterRefs
-                    where wants              = mapMaybe toObjId
-                          first acc obj      = acc ++ ["want " ++ obj ++ " " ++ unwords capabilities]
-                          additional acc obj = acc ++ ["want " ++ obj]
-                          filterPeeledTags   = not . isSuffixOf "^{}" . C.unpack . ref
-                          filterRefs line    = let r = C.unpack $ ref line
-                                                   predicates = map ($ r) [isPrefixOf "refs/tags/", isPrefixOf "refs/heads/"]
-                                               in or predicates
 
 data Remote = Remote {
     getHost         :: String
@@ -56,7 +33,7 @@ data Remote = Remote {
   , getRepository   :: String
 } deriving (Eq, Show)
 
--- | Parse a URL using the git protocol format.
+-- | Parse a URL that is using the git protocol format.
 -- E.g. git://git.apache.org:9418/foo.git
 --
 -- Schema:
@@ -76,16 +53,31 @@ parseRemote = eitherToMaybe . AC.parseOnly parser
           domain = AC.takeTill (\x -> x == '/' || x == ':')
           slash  = AC.satisfy (== '/')
 
-repositoryName :: Remote -> String
-repositoryName = takeFileName . dropExtension . getRepository
-
-clone :: String -> IO ()
-clone url =
+-- | Clone the given git repository (only the git protocol is currently
+-- supported) into a new directory.
+--
+-- <url> The git URL to clone from
+-- [<directory>] The name of the directory to clone into (optional)
+clone :: String -> Maybe String -> IO ()
+clone url maybeDirectory =
     case parseRemote $ C.pack url of
-        Just remote -> let gitRepoName = repositoryName remote
+        Just remote -> let gitRepoName = fromMaybe (repositoryName remote) maybeDirectory
                        in clone' (GitRepository gitRepoName) remote
         _           -> putStrLn $ "Invalid URL" ++ url
 
+clone' :: GitRepository -> Remote -> IO ()
+clone' repo remote@Remote{..} = do
+        (refs,packFile) <- receivePack remote
+        let dir = pathForPack repo
+            -- E.g. in native git this is something like .git/objects/pack/tmp_pack_6bo2La
+            tmpPack = dir </> "tmp_pack_incoming"
+        _ <- createDirectoryIfMissing True dir
+        B.writeFile tmpPack packFile
+        _ <- runReaderT (createGitRepositoryFromPackfile tmpPack refs) repo
+        removeFile tmpPack
+        runReaderT checkoutHead repo
+
+-- | List references in a remote repository
 lsRemote :: String -> IO ()
 lsRemote url =
     case parseRemote $ C.pack url of
@@ -93,18 +85,6 @@ lsRemote url =
             packetLines <- lsRemote' remote
             mapM_ (\line -> printf "%s\t%s\n" (C.unpack $ objId line) (C.unpack $ ref line)) packetLines
         _           -> putStrLn $ "Invalid URL" ++ url
-
--- .git/objects/pack/tmp_pack_6bo2La
-clone' :: GitRepository -> Remote -> IO ()
-clone' repo remote@Remote{..} = do
-        (refs,packFile) <- receivePack remote
-        let dir = pathForPack repo
-            tmpPack = dir </> "tmp_pack_incoming"
-        _ <- createDirectoryIfMissing True dir
-        B.writeFile tmpPack packFile
-        _ <- runReaderT (createGitRepositoryFromPackfile tmpPack refs) repo
-        removeFile tmpPack
-        runReaderT checkoutHead repo
 
 lsRemote' :: Remote -> IO [PacketLine]
 lsRemote' Remote{..} = withSocketsDo $
@@ -114,6 +94,31 @@ lsRemote' Remote{..} = withSocketsDo $
         response <- receive sock
         send sock flushPkt -- Tell the server to disconnect
         return $ parsePacket $ L.fromChunks [response]
+
+refDiscovery :: String -> String -> String
+refDiscovery host repo = pktLine $ "git-upload-pack /" ++ repo ++ "\0host="++host++"\0"
+
+repositoryName :: Remote -> String
+repositoryName = takeFileName . dropExtension . getRepository
+
+toObjId :: PacketLine -> Maybe String
+toObjId (FirstLine obj _ _) = Just $ C.unpack obj
+toObjId (RefLine obj _)     = Just $ C.unpack obj
+toObjId _                   = Nothing
+
+
+-- PKT-LINE("want" SP obj-id SP capability-list LF)
+-- PKT-LINE("want" SP obj-id LF)
+createNegotiationRequest :: [String] -> [PacketLine] -> String
+createNegotiationRequest capabilities = concatMap (++ "") . nub . map (pktLine . (++ "\n")) . foldl' (\acc e -> if null acc then first acc e else additional acc e) [] . wants . filter filterPeeledTags . filter filterRefs
+                    where wants              = mapMaybe toObjId
+                          first acc obj      = acc ++ ["want " ++ obj ++ " " ++ unwords capabilities]
+                          additional acc obj = acc ++ ["want " ++ obj]
+                          filterPeeledTags   = not . isSuffixOf "^{}" . C.unpack . ref
+                          filterRefs line    = let r = C.unpack $ ref line
+                                                   predicates = map ($ r) [isPrefixOf "refs/tags/", isPrefixOf "refs/heads/"]
+                                               in or predicates
+
 
 
 receivePack :: Remote -> IO ([Ref], B.ByteString)
