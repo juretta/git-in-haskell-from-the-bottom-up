@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module Git.Unpack(
+module Git.Store.Unpack (
     unpack
 ) where
 

@@ -3,7 +3,7 @@ module Main where
 import System.Environment       (getArgs)
 import Data.Maybe               (listToMaybe)
 import Git.Remote.Operations
-import Git.Unpack
+import Git.Store.Unpack
 
 main :: IO ()
 main = do
