@@ -34,7 +34,7 @@ receiveFully :: Socket -> IO C.ByteString
 receiveFully sock = receive' sock mempty
    where receive' s acc = do
             msg <- recv s 4096
-            if C.null msg then return acc else receive' s $ mappend acc msg
+            if C.null msg then return acc else receive' s $ acc `mappend` msg
 
 
 -- see sideband.c
@@ -71,22 +71,23 @@ openConnection host port = do
         connect sock (addrAddress serveraddr)
         return sock
 
--- | Read a packet line
+-- | Read a git packet line (variable length binary string prefixed with the overall length). 
+-- Length is 4 byte, hexadecimal, padded with 0.
 readPacketLine :: Socket -> IO (Maybe C.ByteString)
 readPacketLine sock = do
-        msg <- loop C.empty 4 -- check for a zero length return -> disconnected
-        if C.null msg then return Nothing else
-            case readHex $ C.unpack msg of
+        len <- readFully mempty 4 -- check for a zero length return -> disconnected
+        if C.null len then return Nothing else
+            case readHex $ C.unpack len of
                 ((l,_):_) | l > 4 -> do
-                     line <- loop C.empty (l-4)
+                     line <- readFully mempty (l-4)
                      return $ Just line
                 _ -> return Nothing
-    where loop acc expected = do
+    where readFully acc expected = do
             line <- recv sock expected
             let len  = C.length line
-                acc' = acc `C.append` line
+                acc' = acc `mappend` line
                 cont = len /= expected && not (C.null line)
-            if cont then loop acc' (expected - len) else return acc'
+            if cont then readFully acc' (expected - len) else return acc'
 
 {-
 If 'side-band' or 'side-band-64k' capabilities have been specified by

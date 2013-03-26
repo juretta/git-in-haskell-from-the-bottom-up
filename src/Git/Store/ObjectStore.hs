@@ -121,7 +121,7 @@ readBlob GitRepository{..} sha = do
         bs <- C.readFile filename
         return $ parseBlob sha $ inflate bs
     else return Nothing
-    where inflate blob = B.concat $ L.toChunks $ Z.decompress $ L.fromChunks [blob]
+    where inflate blob = B.concat . L.toChunks . Z.decompress $ L.fromChunks [blob]
 
 -- header: "type size\0"
 -- sha1 $ header ++ content

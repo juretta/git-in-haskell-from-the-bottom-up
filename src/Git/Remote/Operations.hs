@@ -89,14 +89,14 @@ lsRemote url =
 lsRemote' :: Remote -> IO [PacketLine]
 lsRemote' Remote{..} = withSocketsDo $
     withConnection getHost (show $ fromMaybe 9418 getPort) $ \sock -> do
-        let payload = refDiscovery getHost getRepository
+        let payload = gitProtoRequest getHost getRepository
         send sock payload
         response <- receive sock
         send sock flushPkt -- Tell the server to disconnect
         return $ parsePacket $ L.fromChunks [response]
 
-refDiscovery :: String -> String -> String
-refDiscovery host repo = pktLine $ "git-upload-pack /" ++ repo ++ "\0host="++host++"\0"
+gitProtoRequest :: String -> String -> String
+gitProtoRequest host repo = pktLine $ "git-upload-pack /" ++ repo ++ "\0host="++host++"\0"
 
 repositoryName :: Remote -> String
 repositoryName = takeFileName . dropExtension . getRepository
@@ -124,7 +124,7 @@ createNegotiationRequest capabilities = concatMap (++ "") . nub . map (pktLine .
 receivePack :: Remote -> IO ([Ref], B.ByteString)
 receivePack Remote{..} = withSocketsDo $
     withConnection getHost (show $ fromMaybe 9418 getPort) $ \sock -> do
-        let payload = refDiscovery getHost getRepository
+        let payload = gitProtoRequest getHost getRepository
         send sock payload
         response <- receive sock
         let pack    = parsePacket $ L.fromChunks [response]

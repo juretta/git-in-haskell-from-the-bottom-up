@@ -39,7 +39,7 @@ toHex x = showHex x ""
 -- | Create a packet line prefixed with the overall length. Length is 4 byte,
 -- hexadecimal, padded with 0.
 pktLine :: String -> String 
-pktLine msg = printf "%04s%s" (toHex . (4 +) $ length msg) msg
+pktLine = printf "%04s%s" =<< toHex . (4 +) . length
 
 -- | Return the Git flush packet.
 flushPkt :: String

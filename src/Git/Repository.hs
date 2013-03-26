@@ -21,7 +21,6 @@ import Control.Monad.Reader
 import Numeric                                              (readOct)
 
 -- | Updates files in the working tree to match the given <tree-ish>
-
 checkoutHead :: WithRepository ()
 checkoutHead = do
     repo <- ask
