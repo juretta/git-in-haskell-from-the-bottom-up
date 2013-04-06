@@ -28,7 +28,7 @@ import Git.Store.Blob
 import System.FilePath
 import System.Directory
 import Data.Foldable                                        (forM_)
-import Data.List                                            (find)
+import Data.List                                            (find, partition)
 import Control.Monad.Reader hiding (forM_)
 
 createGitRepositoryFromPackfile :: FilePath -> [Ref] -> WithRepository ()
@@ -162,11 +162,12 @@ getGitDirectory = (</> ".git") . getName
 
 createRefs :: [Ref] -> WithRepository ()
 createRefs refs = do
-    writeRefs "refs/remotes/origin" $ filterTags refs
-    writeRefs "refs/tags" $ tags refs
+    let (tags, branches) = partition isTag $ filter (not . isPeeledTag) refs
+    writeRefs "refs/remotes/origin" branches
+    writeRefs "refs/tags" tags
     where simpleRefName  = head . reverse . C.split '/'
-          filterTags     = filter (not . C.isPrefixOf "refs/tags" . getRefName)
-          tags           = filter (\e -> (not . C.isSuffixOf "^{}" $ getRefName e) && (C.isPrefixOf "refs/tags" $ getRefName e))
+          isPeeledTag    = C.isSuffixOf "^{}" . getRefName
+          isTag          = (\e -> (not . C.isSuffixOf "^{}" $ getRefName e) && (C.isPrefixOf "refs/tags" $ getRefName e))
           writeRefs refSpace     = mapM_ (\Ref{..} -> createRef (refSpace ++ "/" ++ (C.unpack . simpleRefName $ getRefName)) (C.unpack getObjId)) 
 
 createRef :: String -> String -> WithRepository ()
