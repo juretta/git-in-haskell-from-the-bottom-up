@@ -7,7 +7,7 @@ module Git.Store.ObjectStore (
   , createGitRepositoryFromPackfile
   , updateHead
   , readTree
-  , readBlob
+  , readObject
   , createRef
   , getGitDirectory
 ) where
@@ -48,7 +48,7 @@ unpackPackfile (Packfile _ _ objs) = do
     where   writeObjects (x@(PackfileObject (OBJ_REF_DELTA _) _ _):xs) = liftM (x:) (writeObjects xs)
             writeObjects (PackfileObject objType _ content : xs) = do
                 repo <- ask
-                _ <- liftIO $ writeBlob repo (tt objType) content
+                _ <- liftIO $ writeObject repo (tt objType) content
                 writeObjects xs
             writeObjects []     = return []
 
@@ -60,13 +60,13 @@ unpackPackfile (Packfile _ _ objs) = do
 
             writeDelta repo (PackfileObject ty@(OBJ_REF_DELTA _) _ content) = do
                     base <- case toObjectId ty of
-                        Just sha -> liftIO $ readBlob repo sha
+                        Just sha -> liftIO $ readObject repo sha
                         _        -> return Nothing
                     if isJust base then
                         case patch (getBlobContent $ fromJust base) content of
                             Right target -> do
                                             let base'        = fromJust base
-                                            filename <- writeBlob repo (objType base') target
+                                            filename <- writeObject repo (objType base') target
                                             return $ Just filename
                             Left _       -> return Nothing
                     else return Nothing -- FIXME - base object doesn't exist yet
@@ -107,13 +107,13 @@ pathForObject _ _ = ("", "")
 
 readTree :: GitRepository -> ObjectId -> IO (Maybe Tree)
 readTree repo sha = do
-    treeBlob <- readBlob repo sha
+    treeBlob <- readObject repo sha
     return $ parseTree sha (getBlobContent $ fromJust treeBlob)
 
 -- header: "type size\0"
 -- sha1 $ header ++ content
-readBlob :: GitRepository -> ObjectId -> IO (Maybe Object)
-readBlob GitRepository{..} sha = do
+readObject :: GitRepository -> ObjectId -> IO (Maybe Object)
+readObject GitRepository{..} sha = do
     let (path, name) = pathForObject getName sha
         filename     = path </> name
     exists <- doesFileExist filename
@@ -125,18 +125,18 @@ readBlob GitRepository{..} sha = do
 
 -- header: "type size\0"
 -- sha1 $ header ++ content
-encodeBlob :: ObjectType -> C.ByteString -> (ObjectId, C.ByteString)
-encodeBlob blobType content = do
-    let header       = headerForBlob (C.pack $ show blobType)
+encodeObject :: ObjectType -> C.ByteString -> (ObjectId, C.ByteString)
+encodeObject objectType content = do
+    let header       = headerForBlob (C.pack $ show objectType)
         blob         = header `C.append` content
         sha1         = hsh blob
     (sha1, blob)
     where headerForBlob objType = objType `C.append` " " `C.append` C.pack (show $ C.length content) `C.append` "\0"
           hsh = toHex . SHA1.hash
 
-writeBlob :: GitRepository -> ObjectType -> C.ByteString -> IO FilePath
-writeBlob GitRepository{..} blobType content = do
-    let (sha1, blob) = encodeBlob blobType content
+writeObject :: GitRepository -> ObjectType -> C.ByteString -> IO FilePath
+writeObject GitRepository{..} objectType content = do
+    let (sha1, blob) = encodeObject objectType content
         (path, name) = pathForObject getName sha1
         filename     = path </> name
     _ <- createDirectoryIfMissing True path

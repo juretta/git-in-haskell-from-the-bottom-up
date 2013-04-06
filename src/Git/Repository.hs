@@ -44,7 +44,7 @@ walkTree acc parent tree = do
           handleEntry acc' (TreeEntry mode path sha') = do
                         repo <- ask
                         let fullPath = parent </> toFilePath path
-                        content <- liftIO $ readBlob repo $ toHex sha'
+                        content <- liftIO $ readObject repo $ toHex sha'
                         maybe (return acc') (\e -> do
                                 liftIO $ B.writeFile fullPath (getBlobContent e)
                                 let fMode = fst . head . readOct $ C.unpack mode
@@ -61,7 +61,7 @@ walkTree acc parent tree = do
 resolveTree :: ObjectId -> WithRepository (Maybe Tree)
 resolveTree sha' = do
         repo <- ask
-        blob <- liftIO $ readBlob repo sha' -- readBlob :: GitRepository -> ObjectId -> IO (Maybe Blob)
+        blob <- liftIO $ readObject repo sha'
         maybe (return Nothing) walk blob
     where walk  (Object _ BTree sha1)                = do
                                                       repo <- ask
