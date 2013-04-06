@@ -35,7 +35,7 @@ data Blob = Blob {
 } deriving (Eq, Show)
 
 data Author = Author B.ByteString B.ByteString deriving (Eq, Show)
-data Commiter = Commiter String String deriving (Eq, Show)
+data Commiter = Commiter B.ByteString B.ByteString deriving (Eq, Show)
 
 data Tree = Tree {
     getObjectId :: ObjectId
