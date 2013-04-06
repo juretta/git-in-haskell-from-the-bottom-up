@@ -54,13 +54,13 @@ data PackObjectType =   OBJ_BAD | -- -1
 
 -- | Parse the given pack file into a "Packfile" representation
 packRead :: FilePath -> IO Packfile
-packRead = I.fileDriverRandom parsePackFileObjectHeader
+packRead = I.fileDriverRandom parsePackFile
 
 -- ============================================================================== --
 
-parsePackFileObjectHeader :: I.Iteratee ByteString IO Packfile
-parsePackFileObjectHeader = do
-    magic       <- endianRead4 MSB -- 4 bytes
+parsePackFile :: I.Iteratee ByteString IO Packfile
+parsePackFile = do
+    magic       <- endianRead4 MSB -- 4 bytes, big-endian
     version'    <- endianRead4 MSB
     numObjects' <- endianRead4 MSB
     if packMagic == magic
@@ -88,7 +88,7 @@ parsePackObject = do
 parseObjectSize :: Int -> Int -> I.Iteratee ByteString IO Int
 parseObjectSize size' iter = do
     nextByte <- I.head
-    let add           = (coerce (nextByte .&. 127) :: Int) `shiftL` (4 + (iter * 7))
+    let add           = (coerce (nextByte .&. 127) :: Int) `shiftL` (4 + (iter * 7)) -- shift depends on the number of iterations
         acc           = size' + fromIntegral add
     if isMsbSet nextByte then
         parseObjectSize acc (iter + 1)
