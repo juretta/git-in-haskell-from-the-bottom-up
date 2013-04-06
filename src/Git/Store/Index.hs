@@ -13,11 +13,12 @@ import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as L
 import qualified Codec.Binary.UTF8.String as CS (encode)
 import qualified Crypto.Hash.SHA1 as SHA1
-import Git.Common
-import Git.Store.ObjectStore                 (getGitDirectory)
 import Data.Char                             (ord)
-import System.FilePath
 import Data.Function                         (on)
+import Data.List                             (sortBy)
+import Git.Store.ObjectStore                 (getGitDirectory)
+import Git.Common
+import System.FilePath
 import Data.Word
 import Data.Bits
 import Data.Binary.Builder
@@ -26,7 +27,6 @@ import System.Posix.Files
 import System.Posix.Types
 import Data.Monoid
 import Data.Binary
-import Data.List                            (sortBy)
 
 
 data Index = Index {
@@ -129,7 +129,6 @@ instance Binary IndexEntry where
 -}
 
 {-
-    ??? This doesn't add up?
     32-bit mode, split into (high to low bits)
         4-bit object type
           valid values in binary are 1000 (regular file), 1010 (symbolic link)
@@ -198,7 +197,7 @@ writeIndex entries = do
 
 indexHeader :: Word32 -> Builder
 indexHeader num =
-        putWord32be magic   -- The signature is { 'D', 'I', 'R', 'C' } (stands for "dircache")
+        putWord32be magic      -- The signature is { 'D', 'I', 'R', 'C' } (stands for "dircache")
         <> putWord32be 2       -- Version (2, 3 or 4, we use version 2)
         <> putWord32be num     -- Number of index entries
     where magic = fromOctets $ map (fromIntegral . ord) "DIRC"
