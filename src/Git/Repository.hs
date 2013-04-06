@@ -10,7 +10,7 @@ import qualified Data.ByteString.Char8 as C
 import qualified Data.ByteString as B
 import Text.Printf                                          (printf)
 import Git.Common                                           (GitRepository(..), ObjectId, WithRepository)
-import Git.Store.Blob
+import Git.Store.Object
 import Git.Store.ObjectStore
 import Git.Store.Index
 import System.FilePath
@@ -63,10 +63,10 @@ resolveTree sha' = do
         repo <- ask
         blob <- liftIO $ readBlob repo sha' -- readBlob :: GitRepository -> ObjectId -> IO (Maybe Blob)
         maybe (return Nothing) walk blob
-    where walk  (Blob _ BTree sha1)                = do
+    where walk  (Object _ BTree sha1)                = do
                                                       repo <- ask
                                                       liftIO $ readTree repo sha1
-          walk  c@(Blob _ BCommit _)               = do
+          walk  c@(Object _ BCommit _)               = do
                                                         let maybeCommit = parseCommit $ getBlobContent c
                                                         maybe (return Nothing) extractTree maybeCommit
           walk _                                   = return Nothing

@@ -1,14 +1,14 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module Git.Store.Blob (
+module Git.Store.Object (
     parseTree
   , parseCommit
   , parsePerson     -- Remove?
-  , parseBlob
+  , parseObject
   , toCommit
   , Commit(..)
-  , Blob(..)
-  , BlobType(..)
+  , Object(..)
+  , ObjectType(..)
   , Tree(..)
   , TreeEntry(..)
 ) where
@@ -20,17 +20,17 @@ import Data.Attoparsec.ByteString.Char8
 import Control.Applicative ((<|>))
 import Git.Common                                           (eitherToMaybe, ObjectId)
 
-data BlobType = BTree | BCommit | BTag | BBlob deriving (Eq)
+data ObjectType = BTree | BCommit | BTag | BBlob deriving (Eq)
 
-instance Show BlobType where
+instance Show ObjectType where
     show BTree      = "tree"
     show BCommit    = "commit"
     show BTag       = "tag"
     show BBlob      = "blob"
 
-data Blob = Blob {
+data Object = Object {
     getBlobContent  :: B.ByteString
-  , objType         :: BlobType
+  , objType         :: ObjectType
   , sha             :: ObjectId
 } deriving (Eq, Show)
 
@@ -58,28 +58,28 @@ data Commit = Commit {
 } deriving (Eq,Show)
 
 
-toCommit :: Blob -> Maybe Commit
-toCommit (Blob content BCommit _) = parseCommit content
+toCommit :: Object -> Maybe Commit
+toCommit (Object content BCommit _) = parseCommit content
 toCommit _ = Nothing
 
-parseBlob :: ObjectId -> C.ByteString -> Maybe Blob
-parseBlob sha1 blob = eitherToMaybe $ parseOnly (blobParser sha1) blob
+parseObject :: ObjectId -> C.ByteString -> Maybe Object
+parseObject sha1 obj = eitherToMaybe $ parseOnly (objParser sha1) obj
 
 -- header: "type size\0"
 -- sha1 $ header ++ content
-blobParser :: ObjectId -> Parser Blob
-blobParser sha1 = do
+objParser :: ObjectId -> Parser Object
+objParser sha1 = do
    objType' <- string "commit" <|> string "tree" <|> string "blob" <|> string "tag"
    char ' '
    _size <- takeWhile isDigit
    nul
-   blob <- takeByteString
-   return $ Blob blob (obj objType') sha1
+   content <- takeByteString
+   return $ Object content (obj objType') sha1
    where obj "commit"   = BCommit
          obj "tree"     = BTree
          obj "tag"      = BTag
          obj "blob"     = BBlob
-         obj _          = error "Invalid blob type" -- FIXME Let the parser fail
+         obj _          = error "Invalid object type" -- FIXME Let the parser fail
 
 
 parseTree :: ObjectId -> C.ByteString -> Maybe Tree

@@ -1,12 +1,12 @@
 {-# LANGUAGE OverloadedStrings #-}
-module Git.Store.BlobTest
+module Git.Store.ObjectTest
   (
     main
   , test
   ) where
 
 import qualified Test.HUnit as H
-import Git.Store.Blob
+import Git.Store.Object
 import Test.QuickCheck hiding ((.&.))
 import Test.Framework (Test, defaultMain, testGroup)
 import Test.Framework.Providers.QuickCheck2 (testProperty)

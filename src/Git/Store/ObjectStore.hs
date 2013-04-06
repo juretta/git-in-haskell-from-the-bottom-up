@@ -24,7 +24,7 @@ import Git.Pack.Packfile
 import Git.Pack.Delta                                       (patch)
 import Git.Common                                           (GitRepository(..), ObjectId, WithRepository, Ref(..))
 -- Tree
-import Git.Store.Blob
+import Git.Store.Object
 import System.FilePath
 import System.Directory
 import Data.Foldable                                        (forM_)
@@ -112,20 +112,20 @@ readTree repo sha = do
 
 -- header: "type size\0"
 -- sha1 $ header ++ content
-readBlob :: GitRepository -> ObjectId -> IO (Maybe Blob)
+readBlob :: GitRepository -> ObjectId -> IO (Maybe Object)
 readBlob GitRepository{..} sha = do
     let (path, name) = pathForObject getName sha
         filename     = path </> name
     exists <- doesFileExist filename
     if exists then do
         bs <- C.readFile filename
-        return $ parseBlob sha $ inflate bs
+        return $ parseObject sha $ inflate bs
     else return Nothing
     where inflate blob = B.concat . L.toChunks . Z.decompress $ L.fromChunks [blob]
 
 -- header: "type size\0"
 -- sha1 $ header ++ content
-encodeBlob :: BlobType -> C.ByteString -> (ObjectId, C.ByteString)
+encodeBlob :: ObjectType -> C.ByteString -> (ObjectId, C.ByteString)
 encodeBlob blobType content = do
     let header       = headerForBlob (C.pack $ show blobType)
         blob         = header `C.append` content
@@ -134,7 +134,7 @@ encodeBlob blobType content = do
     where headerForBlob objType = objType `C.append` " " `C.append` C.pack (show $ C.length content) `C.append` "\0"
           hsh = toHex . SHA1.hash
 
-writeBlob :: GitRepository -> BlobType -> C.ByteString -> IO FilePath
+writeBlob :: GitRepository -> ObjectType -> C.ByteString -> IO FilePath
 writeBlob GitRepository{..} blobType content = do
     let (sha1, blob) = encodeBlob blobType content
         (path, name) = pathForObject getName sha1
