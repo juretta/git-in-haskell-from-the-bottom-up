@@ -12,7 +12,7 @@ module Git.Pack.Packfile (
 
 import Control.Applicative
 import Data.ByteString (ByteString)
-import qualified Data.Iteratee as I
+import qualified Data.Iteratee          as It
 import Data.Iteratee.Binary
 import Data.Iteratee.ZLib
 import Control.Monad                    (replicateM)
@@ -54,11 +54,11 @@ data PackObjectType =   OBJ_BAD | -- -1
 
 -- | Parse the given pack file into a "Packfile" representation
 packRead :: FilePath -> IO Packfile
-packRead = I.fileDriverRandom parsePackFile
+packRead = It.fileDriverRandom parsePackFile
 
 -- ============================================================================== --
 
-parsePackFile :: I.Iteratee ByteString IO Packfile
+parsePackFile :: It.Iteratee ByteString IO Packfile
 parsePackFile = do
     magic       <- endianRead4 MSB -- 4 bytes, big-endian
     version'    <- endianRead4 MSB
@@ -68,26 +68,26 @@ parsePackFile = do
                 else return InvalidPackfile
   where packMagic = fromOctets $ map (fromIntegral . ord) "PACK"
 
-parseObjects :: Word32 -> Word32 -> I.Iteratee ByteString IO Packfile
+parseObjects :: Word32 -> Word32 -> It.Iteratee ByteString IO Packfile
 parseObjects version' num = do
     objs <- catMaybes <$> replicateM (fromIntegral num) parsePackObject
     return $ Packfile version' num objs
 
 
-parsePackObject :: I.Iteratee ByteString IO (Maybe PackfileObject)
+parsePackObject :: It.Iteratee ByteString IO (Maybe PackfileObject)
 parsePackObject = do
-    byte <- I.head -- read 1 byte
+    byte <- It.head -- read 1 byte
     let objectType' = byte `shiftR` 4 .&. 7 -- shift right and masking the 4th least significtan bit
         initial     = fromIntegral $ byte .&. 15
     size' <- if isMsbSet byte then parseObjectSize initial 0 else return initial
     obj <- toPackObjectType objectType'
-    !content <- I.joinI $ enumInflate Zlib defaultDecompressParams I.stream2stream
+    !content <- It.joinI $ enumInflate Zlib defaultDecompressParams It.stream2stream
     return $ (\t -> PackfileObject t size' content) <$> obj
 
 -- Parse the variable length size header part of the object entry
-parseObjectSize :: Int -> Int -> I.Iteratee ByteString IO Int
+parseObjectSize :: Int -> Int -> It.Iteratee ByteString IO Int
 parseObjectSize size' iter = do
-    nextByte <- I.head
+    nextByte <- It.head
     let add           = (coerce (nextByte .&. 127) :: Int) `shiftL` (4 + (iter * 7)) -- shift depends on the number of iterations
         acc           = size' + fromIntegral add
     if isMsbSet nextByte then
@@ -100,7 +100,7 @@ parseObjectSize size' iter = do
 -- =================================================================================
 
 -- Map the internal representation of the object type to the PackObjectType
-toPackObjectType :: (Show a, Integral a) => a -> I.Iteratee ByteString IO (Maybe PackObjectType)
+toPackObjectType :: (Show a, Integral a) => a -> It.Iteratee ByteString IO (Maybe PackObjectType)
 toPackObjectType 1  = return $ Just OBJ_COMMIT
 toPackObjectType 2  = return $ Just OBJ_TREE
 toPackObjectType 3  = return $ Just OBJ_BLOB
@@ -109,7 +109,7 @@ toPackObjectType 6  = do
     offset <- readOffset 0 0
     return $ Just (OBJ_OFS_DELTA offset)
 toPackObjectType 7  = do 
-    baseObj <- replicateM 20 I.head -- 20-byte base object name SHA1
+    baseObj <- replicateM 20 It.head -- 20-byte base object name SHA1
     return $ Just (OBJ_REF_DELTA baseObj)
 toPackObjectType _  = return Nothing
 
@@ -120,9 +120,9 @@ toPackObjectType _  = return Nothing
 --  concatenating the lower 7 bit of each byte, and
 --  for n >= 2 adding 2^7 + 2^14 + ... + 2^(7*(n-1))
 --  to the result.
-readOffset :: Int -> Int -> I.Iteratee ByteString IO Int
+readOffset :: Int -> Int -> It.Iteratee ByteString IO Int
 readOffset shft acc = do
-    x <- I.head
+    x <- It.head
     let bs = acc + ((coerce (x .&. 0x7f) :: Int) `shiftL` shft)
     if isMsbSet x
         then readOffset (shft+7) (bs+1)
