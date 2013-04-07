@@ -10,15 +10,14 @@ import qualified Data.ByteString.Char8 as C
 import qualified Data.ByteString as B
 import Text.Printf                                          (printf)
 import Git.Common                                           (GitRepository(..), ObjectId, WithRepository)
+import Numeric                                              (readOct)
 import Git.Store.Object
 import Git.Store.ObjectStore
 import Git.Store.Index
 import System.FilePath
 import System.Directory
-import Data.Char                                            (isSpace)
 import System.Posix.Files
 import Control.Monad.Reader
-import Numeric                                              (readOct)
 
 -- | Updates files in the working tree to match the given <tree-ish>
 checkoutHead :: WithRepository ()
@@ -81,14 +80,5 @@ toHex :: C.ByteString -> String
 toHex bytes = C.unpack bytes >>= printf "%02x"
 
 readHead :: WithRepository ObjectId
-readHead = do
-    repo <- ask
-    let gitDir = getGitDirectory repo
-    ref <- liftIO $ C.readFile (gitDir </> "HEAD")
-    -- TODO check if valid HEAD
-    let unwrappedRef = C.unpack $ strip $ head $ tail $ C.split ':' ref
-    obj <- liftIO $ C.readFile (gitDir </> unwrappedRef)
-    return $ C.unpack $ strip obj
-  where strip = C.takeWhile (not . isSpace) . C.dropWhile isSpace
-
+readHead = readSymRef "HEAD"
 

@@ -8,6 +8,7 @@ module Git.Store.ObjectStore (
   , updateHead
   , readTree
   , readObject
+  , readSymRef
   , createRef
   , getGitDirectory
 ) where
@@ -20,6 +21,7 @@ import qualified Crypto.Hash.SHA1 as SHA1
 -- FIXME -> don't use isJust/fromJust
 import Data.Maybe                                           (isJust, fromJust, isNothing)
 import Text.Printf                                          (printf)
+import Data.Char                                            (isSpace)
 import Git.Pack.Packfile
 import Git.Pack.Delta                                       (patch)
 import Git.Common                                           (GitRepository(..), ObjectId, WithRepository, Ref(..))
@@ -94,7 +96,15 @@ createSymRef symName ref = do
         repo <- ask
         liftIO $ writeFile (getGitDirectory repo </> symName) $ "ref: " ++ ref ++ "\n"
 
-
+readSymRef :: String -> WithRepository ObjectId
+readSymRef name = do
+    repo <- ask
+    let gitDir = getGitDirectory repo
+    ref <- liftIO $ C.readFile (gitDir </> name)
+    let unwrappedRef = C.unpack $ strip $ head $ tail $ C.split ':' ref
+    obj <- liftIO $ C.readFile (gitDir </> unwrappedRef)
+    return $ C.unpack (strip obj)
+  where strip = C.takeWhile (not . isSpace) . C.dropWhile isSpace
 
 pathForPack :: GitRepository -> FilePath
 pathForPack repo = getGitDirectory repo </> "objects" </> "pack"
