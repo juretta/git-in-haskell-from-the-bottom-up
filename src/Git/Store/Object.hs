@@ -3,7 +3,6 @@
 module Git.Store.Object (
     parseTree
   , parseCommit
-  , parsePerson     -- Remove?
   , parseObject
   , toCommit
   , Commit(..)
@@ -34,8 +33,8 @@ data Object = Object {
   , sha             :: ObjectId
 } deriving (Eq, Show)
 
-data Author = Author B.ByteString B.ByteString deriving (Eq, Show)
-data Commiter = Commiter B.ByteString B.ByteString deriving (Eq, Show)
+data Identity = Author B.ByteString B.ByteString
+              | Commiter B.ByteString B.ByteString deriving (Eq, Show)
 
 data Tree = Tree {
     getObjectId :: ObjectId
@@ -52,8 +51,8 @@ data Commit = Commit {
     getTree        :: B.ByteString
   , getParents     :: [B.ByteString]
   , getSha         :: B.ByteString
-  , getAuthor      :: Author
-  , getCommiter    :: Commiter
+  , getAuthor      :: Identity
+  , getCommiter    :: Identity
   , getMessage     :: B.ByteString
 } deriving (Eq,Show)
 
@@ -79,7 +78,7 @@ objParser sha1 = do
          obj "tree"     = BTree
          obj "tag"      = BTag
          obj "blob"     = BBlob
-         obj _          = error "Invalid object type" -- FIXME Let the parser fail
+         obj _          = error "Invalid object type" -- The parser wouldn't get here anyway
 
 
 parseTree :: ObjectId -> C.ByteString -> Maybe Tree
@@ -140,11 +139,13 @@ commitParser = do
     parents <- many' parseParentCommit
     author <- "author " .*> parsePerson
     space
-    _commiter <- "committer " .*> parsePerson
+    commiter <- "committer " .*> parsePerson
     space
     space
     message <- takeByteString
-    return $ Commit tree parents B.empty (Author (getPersonName author) (getPersonEmail author)) (Commiter "" "") message -- FIXME Use Commiter
+    let author'   = Author (getPersonName author) (getPersonEmail author)
+        commiter' = Commiter (getPersonName commiter) (getPersonEmail commiter)
+    return $ Commit tree parents B.empty author' commiter' message
 
 parseParentCommit :: Parser C.ByteString
 parseParentCommit = do
