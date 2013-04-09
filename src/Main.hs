@@ -2,6 +2,7 @@ module Main where
 
 import System.Environment       (getArgs)
 import Data.Maybe               (listToMaybe)
+import Git.Store.Index          (IndexEntry(..), readIndex)
 import Git.Remote.Operations
 import Git.Store.Unpack
 
@@ -12,9 +13,17 @@ main = do
         (cmd:xs)    -> run cmd xs
         _           -> error "Missing command"
 
+-- | Execute the given command
 run :: String -> [String] -> IO ()
-run "clone" (url:xs)        = clone url $ listToMaybe xs
-run "ls-remote" (url:_)     = lsRemote url
-run "unpack" (name:file:_)  = unpack name file
-run _ _                     = error "Unknown command or missing arguments"
+run "clone" (url:xs)                = clone url $ listToMaybe xs
+run "ls-remote" (url:_)             = lsRemote url
+run "unpack" (name:file:_)          = unpack name file
+run "read-index" (file:pattern:_)   = do
+                                entries <- readIndex file
+                                printIndex $ filter (\e -> path e == pattern) entries
+run "read-index" (file:_)           = printIndex =<< readIndex file
+run _ _                             = error "Unknown command or missing arguments"
 
+
+printIndex :: [IndexEntry] -> IO ()
+printIndex = mapM_ (\l -> putStrLn $ show l ++ "\n")

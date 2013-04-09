@@ -13,7 +13,7 @@ import Git.Common                                           (GitRepository(..), 
 import Numeric                                              (readOct)
 import Git.Store.Object
 import Git.Store.ObjectStore
-import Git.Store.Index
+import Git.Store.Index                                      (IndexEntry, GitFileMode(..), writeIndex, indexEntryFor)
 import System.FilePath
 import System.Directory
 import System.Posix.Files
@@ -31,6 +31,12 @@ checkoutHead = do
 
 -- TODO Improve error handling: Should return an error instead of
 -- of implicitly skipping erroneous elements.
+-- TODO support _all_ the different git modes (from https://www.kernel.org/pub/software/scm/git/docs/git-fast-import.html):
+--  100644 or 644: A normal (not-executable) file. The majority of files in most projects use this mode. If in doubt, this is what you want.
+--  100755 or 755: A normal, but executable, file.
+--  120000: A symlink, the content of the file will be the link target.
+--  160000: A gitlink, SHA-1 of the object refers to a commit in another repository. Git links can only be specified by SHA or through a commit mark. They are used to implement submodules.
+-- 040000: A subdirectory. Subdirectories can only be specified by SHA or through a tree mark set with --import-marks. 
 walkTree :: [IndexEntry] -> FilePath -> Tree -> WithRepository [IndexEntry]
 walkTree acc parent tree = do
     let entries = getEntries tree

@@ -1,10 +1,11 @@
-{-# LANGUAGE OverloadedStrings, BangPatterns #-}
+{-# LANGUAGE OverloadedStrings, BangPatterns, NoMonomorphismRestriction, RecordWildCards #-}
 
 module Git.Store.Index (
     writeIndex
+  , readIndex
   , indexEntryFor
   , GitFileMode(..)
-  , IndexEntry
+  , IndexEntry(path)
 ) where
 
 import Prelude hiding (take, takeWhile)
@@ -20,13 +21,15 @@ import Git.Store.ObjectStore                 (getGitDirectory)
 import Git.Common
 import System.FilePath
 import Data.Word
+import Data.Int
 import Data.Bits
 import Data.Binary.Builder
+import Data.Binary.Get
 import Control.Monad.Reader
 import System.Posix.Files
-import System.Posix.Types
 import Data.Monoid
 import Data.Binary
+import Text.Printf
 
 
 data Index = Index {
@@ -52,18 +55,27 @@ Change: Tue Feb 26 23:03:48 2013
   size: 49  flags: 0
 -}
 data IndexEntry = IndexEntry {
-    ctimeSec    :: EpochTime
-  , mtimeSec    :: EpochTime
-  , device      :: DeviceID
-  , inode       :: FileID
-  , mode        :: FileMode
-  , uid         :: UserID
-  , gid         :: GroupID
-  , size        :: FileOffset
+    ctime       :: Int64
+  , mtime       :: Int64
+  , device      :: Word64
+  , inode       :: Word64
+  , mode        :: Word32
+  , uid         :: Word32
+  , gid         :: Word32
+  , size        :: Int64
   , sha         :: [Word8]
   , gitFileMode :: GitFileMode
-  , name        :: String
-} deriving (Show, Eq)
+  , path        :: String
+} deriving (Eq)
+
+instance Show IndexEntry where
+    show IndexEntry{..} = printf ("%s\n  ctime: %d\n  mtime: %d\n  dev: %d  inode: %d\n" ++
+                                "  uid: %8d  gid: %d\n  size: %7d  git file mode: %s\n  sha1: %s")
+                            path ctime mtime device inode uid gid size (show gitFileMode) (toHex' sha)
+
+
+toHex' :: [Word8] -> String
+toHex' = (printf "%02x" =<<)
 
 --
 -- https://raw.github.com/git/git/master/Documentation/technical/index-format.txt
@@ -119,14 +131,30 @@ instance Binary IndexEntry where
                                               pad   = C.replicate toPad '\NUL'
                                               padded = if toPad /= 8 then n ++ B.unpack pad else n
                                           in padded
-                                          -- FIXME - pathname must contain the full
-                                          -- path relative to root!
-    get = undefined
+    get = readIndexEntry
+
 {-
 #define S_IFLNK    0120000 /* Symbolic link */
-#define S_IFGITLINK	0160000
-#define	_S_IFREG	0x8000	/* Regular */
+#define S_IFGITLINK     0160000
+#define  _S_IFREG     0x8000     /* Regular */
 -}
+
+-- | Read the index file and return the list of index entries.
+readIndex :: FilePath -> IO [IndexEntry]
+readIndex fullPath = do
+    content <- L.readFile fullPath
+    (_, _, num) <- return $ runGet readHeader content
+    return $ readMany [] (L.drop 12 content) 0 num
+    where readMany acc remaining' offset toRead | toRead > 0 = do
+            (ie, bs, consumed) <- return $ runGetState readIndexEntry remaining' offset
+            readMany (ie : acc) bs (consumed+offset) (toRead-1)
+          readMany acc _ _ _ = acc
+          readHeader = do
+            magic   <- getWord32be
+            version <- getWord32be
+            num     <- getWord32be
+            return (magic, version, num)
+
 
 {-
     32-bit mode, split into (high to low bits)
@@ -145,24 +173,72 @@ instance Binary IndexEntry where
         is stored in this field.
 -}
 
-data GitFileMode = Regular | SymLink | GitLink deriving (Eq, Show)
+-- | Read a single index entry
+readIndexEntry :: Get IndexEntry
+readIndexEntry = do
+    ctime'    <- getWord64be
+    mtime'    <- getWord64be
+    device'   <- getWord32be
+    inode'    <- getWord32be
+    mode'     <- getWord32be
+    uid'      <- getWord32be
+    gid'      <- getWord32be
+    size'     <- getWord32be
+    sha'      <- replicateM 20 getWord8
+    (pathLength, _stage) <- toFlags
+    let toPad       = 8 - ((pathLength - 2) `mod` 8)
+        objType     = toGitFileMode (mode' `shiftR` 12)
+    path'     <- getByteString (coerce pathLength)
+    _         <- getByteString (coerce toPad)
+    return $ IndexEntry (coerce $ ctime' `shiftR` 32) (coerce $ mtime' `shiftR` 32) (coerce device')
+                        (coerce inode') (coerce mode') (coerce uid')
+                        (coerce gid') (coerce size') sha' objType (C.unpack path')
+  where coerce = fromIntegral
+        toFlags = do
+                word16 <- getWord16be
+                let pathLength = (word16 .&. 0xFFF) :: Word16
+                    stage      = (word16 `shiftR` 12) .&. 3 :: Word16
+                return (pathLength, stage)
+        toGitFileMode :: Word32 -> GitFileMode
+        toGitFileMode 10 = SymLink         -- symbolic link    1010
+        toGitFileMode 14 = GitLink         -- gitlink          1110
+        toGitFileMode _  = Regular         -- regular file     1000
 
-makeRelativeToRepoRoot :: String -> FilePath -> FilePath
-makeRelativeToRepoRoot repoName path =
-    joinPath $ dropWhile (== repoName) $ dirs path
-    where dirs = splitDirectories . normalise
 
+-- | Write the list of index entries into the @.git/index@ file
+writeIndex :: [IndexEntry] -> WithRepository ()
+writeIndex [] = return ()
+writeIndex entries = do
+    fullPath <- indexFilePath
+    content <- encodeIndex $ Index entries
+    liftIO $ B.writeFile fullPath content
+
+indexFilePath :: WithRepository FilePath
+indexFilePath = do
+    repo <- ask
+    return $ getGitDirectory repo </> "index"
+
+
+-- | Return an @IndexEntry@ for the given file
 indexEntryFor :: FilePath -> GitFileMode -> B.ByteString -> FileStatus -> WithRepository IndexEntry
 indexEntryFor filePath gitFileMode' sha' stat = do
         repo <- ask
         let fileName = makeRelativeToRepoRoot (getName repo) filePath
-        return $ IndexEntry (statusChangeTime stat) (modificationTime stat)
-                        (deviceID stat) (fileID stat) (fileMode stat)
-                        (fileOwner stat) (fileGroup stat) (fileSize stat)
+        return $ IndexEntry (coerce $ statusChangeTime stat) (coerce $ modificationTime stat)
+                        (coerce $ deviceID stat) (coerce $ fileID stat) (coerce $ fileMode stat)
+                        (coerce $ fileOwner stat) (coerce $ fileGroup stat) (coerce $ fileSize stat)
                         (B.unpack sha') gitFileMode' fileName
+        where coerce = fromIntegral . fromEnum
 -- consider moving to the HiRes variants (e.g. @statusChangeTimeHiRes@ instead
 -- of @statusChangeTime@) but at a cursory glance it doesn't look like it's
 -- possible to get the nanoseconds out of PosixTime???
+
+data GitFileMode = Regular | SymLink | GitLink deriving (Eq, Show)
+
+makeRelativeToRepoRoot :: String -> FilePath -> FilePath
+makeRelativeToRepoRoot repoName path' =
+    joinPath $ dropWhile (== repoName) $ dirs path'
+    where dirs = splitDirectories . normalise
 
 encodeIndex :: Index -> WithRepository B.ByteString
 encodeIndex toWrite = do
@@ -180,20 +256,10 @@ casing of directory separator '/'). Entries with the same name are sorted by
 their stage field.
 -}
 sortIndexEntries :: [IndexEntry] -> [IndexEntry]
-sortIndexEntries = sortBy (compare `on` name)
-
+sortIndexEntries = sortBy (compare `on` path)
 
 lazyToStrictBS :: L.ByteString -> B.ByteString
 lazyToStrictBS x = B.concat $ L.toChunks x
-
-writeIndex :: [IndexEntry] -> WithRepository ()
-writeIndex [] = return ()
-writeIndex entries = do
-    repo <- ask
-    let fullPath = getGitDirectory repo </> "index"
-    content <- encodeIndex $ Index entries
-    liftIO $ B.writeFile fullPath content
-
 
 indexHeader :: Word32 -> Builder
 indexHeader num =
