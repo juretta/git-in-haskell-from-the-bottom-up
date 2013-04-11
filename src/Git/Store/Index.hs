@@ -115,9 +115,9 @@ instance Binary IndexEntry where
             put $ coerce size'                  -- filesize, truncated to 32-bit
             mapM_ put sha'                      -- 160-bit SHA-1 for the represented object - [Word8]
             put flags                           -- 16-bit
-            mapM_ put finalPath          -- variable length - [Word8]
+            mapM_ put finalPath                 -- variable length - [Word8] padded with \NUL
         where zero = 0 :: Word32
-              pathName                  = name' -- ++ "\NUL"
+              pathName                  = name'
               coerce  x                 = (toEnum $ fromEnum x) :: Word32
               toMode gfm fm             = (objType gfm `shiftL` 12) .|. permissions gfm fm
               flags                     = (((toEnum . length $ pathName)::Word16) .&. 0xFFF) :: Word16 -- mask the 4 high order bits -- FIXME: length if the length is less than 0xFFF; otherwise 0xFFF is stored in this field.
