@@ -55,10 +55,9 @@ parseRemote = eitherToMaybe . AC.parseOnly parser
 
 -- | Clone the given git repository (only the git protocol is currently
 -- supported) into a new directory.
---
--- <url> The git URL to clone from
--- [<directory>] The name of the directory to clone into (optional)
-clone :: String -> Maybe String -> IO ()
+clone :: String         -- ^ The git URL to clone from
+      -> Maybe String   -- ^ The name of the directory to clone into (optional)
+      -> IO ()
 clone url maybeDirectory =
     case parseRemote $ C.pack url of
         Just remote -> let gitRepoName = fromMaybe (repositoryName remote) maybeDirectory
@@ -78,7 +77,8 @@ clone' repo remote@Remote{..} = do
         runReaderT checkoutHead repo
 
 -- | List references in a remote repository
-lsRemote :: String -> IO ()
+lsRemote :: String  -- ^ Location of the repository
+         -> IO ()
 lsRemote url =
     case parseRemote $ C.pack url of
         Just remote -> do

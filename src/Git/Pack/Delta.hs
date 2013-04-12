@@ -69,7 +69,9 @@ main = do
 --     delta <- B.readFile deltaFile
 --     either putStrLn (B.writeFile \"target.file\") $ patch source delta
 -- @
-patch :: B.ByteString -> B.ByteString -> Either String B.ByteString
+patch :: B.ByteString -- ^ Source/Base
+      -> B.ByteString -- ^ Delta
+      -> Either String B.ByteString
 patch base delta = do
         header <- decodeDeltaHeader delta
         if B.length base == sourceLength header then
