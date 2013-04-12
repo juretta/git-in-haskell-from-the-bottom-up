@@ -26,4 +26,4 @@ run _ _                             = error "Unknown command or missing argument
 
 
 printIndex :: [IndexEntry] -> IO ()
-printIndex = mapM_ (\l -> putStrLn $ show l ++ "\n")
+printIndex = mapM_ (putStrLn . (++ "\n") . show)
