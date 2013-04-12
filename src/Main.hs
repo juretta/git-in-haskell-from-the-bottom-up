@@ -11,7 +11,7 @@ main = do
     args <- getArgs
     case args of
         (cmd:xs)    -> run cmd xs
-        _           -> error "Missing command"
+        _           -> error "usage: hgit clone <repo> [<dir>]"
 
 -- | Execute the given command
 run :: String -> [String] -> IO ()
