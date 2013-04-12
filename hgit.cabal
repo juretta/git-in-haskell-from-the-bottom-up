@@ -24,7 +24,6 @@ test-suite hgit-testsuite
   type:                     exitcode-stdio-1.0
   main-is:                  TestRunner.hs
   hs-source-dirs:           tests/src, src
-  ghc-options:              -fhpc
   build-depends:            base < 5 && >= 3,
                             test-framework >= 0.3.3,
                             test-framework-quickcheck2 >= 0.2.9,
