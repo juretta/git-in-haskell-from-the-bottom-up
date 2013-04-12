@@ -5,11 +5,11 @@ module Git.Common (
   , flushPkt
   , isMsbSet
   , eitherToMaybe
+  , fromOctets
   , GitRepository(..)
   , Ref(..)
   , ObjectId
   , WithRepository
-  , fromOctets
 ) where
 
 import qualified Data.ByteString.Char8 as C

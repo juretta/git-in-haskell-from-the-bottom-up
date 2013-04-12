@@ -1,10 +1,15 @@
 {-# LANGUAGE OverloadedStrings, BangPatterns, RecordWildCards #-}
 
+-- | Provide a number of high level commands/operations like clone or
+-- ls-remote.
 module Git.Remote.Operations (
-    clone
+    -- * Types
+    Remote(..)
+    -- * Commands
+  , clone
   , lsRemote
+    -- * Helper functions
   , parseRemote
-  , Remote(..)
 ) where
 
 import qualified Data.Attoparsec.Char8 as AC
@@ -27,6 +32,7 @@ import Git.Remote.PackProtocol
 import Git.Store.ObjectStore
 import Git.Repository
 
+-- | The remote repository identified by the host, port and repository path.
 data Remote = Remote {
     getHost         :: String
   , getPort         :: Maybe Int
@@ -34,14 +40,16 @@ data Remote = Remote {
 } deriving (Eq, Show)
 
 -- | Parse a URL that is using the git protocol format.
--- E.g. git://git.apache.org:9418/foo.git
+-- E.g. @git://git.apache.org:9418/foo.git@
 --
 -- Schema:
---   * git://host.xz[:port]/path/to/repo.git/
---   * git://host.xz[:port]/~[user]/path/to/repo.git/
 --
--- See the "GIT URLS" section on
--- http://www.kernel.org/pub/software/scm/git/docs/git-clone.html
+--   * @git://host.xz[:port]/path/to/repo.git/@
+--
+--   * @git://host.xz[:port]/~[user]/path/to/repo.git/@
+--
+-- See the /GIT URLS/ section on
+-- <http://www.kernel.org/pub/software/scm/git/docs/git-clone.html>
 parseRemote :: B.ByteString -> Maybe Remote
 parseRemote = eitherToMaybe . AC.parseOnly parser
     where parser = do

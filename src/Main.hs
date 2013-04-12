@@ -1,4 +1,15 @@
-module Main where
+
+-- | Provides the main entry point and supports the following commands:
+--
+--  * @clone@ - Clone a remote repository using the native git protocol.
+--              Similar to the @git clone@ command.
+--  
+--  * @ls-remote@ - List references in a remote repository.
+--
+--  * @unpack@ - Unpack a pack file into a bare repository.
+--
+--  * @read-index@ - Read a @.git/index@ file and show the index entries.
+module Main (main, run) where
 
 import System.Environment       (getArgs)
 import Data.Maybe               (listToMaybe)

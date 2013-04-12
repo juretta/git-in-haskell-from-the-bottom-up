@@ -8,13 +8,14 @@ Copyright:          Stefan Saasen
 Synopsis:           Exploring git in Haskell
 Category:           Development
 Description:        Exploring git, the git transfer protocols and the object store in Haskell
-Homepage:           https://bitbucket.org/ssaasen/git-bottom-up
+                    See <http://stefan.saasen.me/articles/git-clone-in-haskell-from-the-bottom-up/> for futher information.
+Homepage:           https://bitbucket.org/ssaasen/git-clone-in-haskell-from-the-bottom-up
 Cabal-Version:      >= 1.6
 Build-Type:         Simple
 
 Source-Repository   head
   Type:             git
-  Location:         git@bitbucket.org:ssaasen/git-bottom-up.git
+  Location:         git@bitbucket.org:ssaasen/git-clone-in-haskell-from-the-bottom-up.git
 
 Flag                small_base
   Description:      Choose the new, split-up base package.
