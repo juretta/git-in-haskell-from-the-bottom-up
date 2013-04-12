@@ -1,4 +1,4 @@
-## Implementing git clone in Haskell
+# Implementing git clone in Haskell
 
 
 Source code for the [git clone in Haskell from the bottom up](http://stefan.saasen.me/articles/git-clone-in-haskell-from-the-bottom-up/) article.
@@ -26,3 +26,12 @@ There is a simple Rakefile that can be used to build the binary and to run the t
     rake deps      # Install required dependencies
     rake dev:tags  # Generate a ctags file
     rake test      # Run the tests
+    
+## Tests
+
+To run the tests directly run:
+
+    cabal clean
+    cabal configure --enable-tests
+    cabal build
+    cabal test --show-details=always
