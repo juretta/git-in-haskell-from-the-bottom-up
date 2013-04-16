@@ -15,6 +15,11 @@ task :build => [:clean] do
   run_cabal commands
 end
 
+desc "Build and copy the binary in the cabal bin directory"
+task :copy => [:build] do
+  run_cabal ["copy"]
+end
+
 desc "Run the tests"
 task :test => [:clean] do
   commands = ["configure --enable-tests", "build" , "test --show-details=always"]
