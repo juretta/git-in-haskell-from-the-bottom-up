@@ -22,7 +22,12 @@ main = do
     args <- getArgs
     case args of
         (cmd:xs)    -> run cmd xs
-        _           -> error "usage: hgit clone <repo> [<dir>]"
+        _           -> error $ "usage: hgit <command> [<args>]\n\n" ++
+                               "Supported commands are:\n" ++
+                               "clone       <repo> [<dir>]    Clone a repository into a new directory\n" ++
+                               "ls-remote   <repo>            List references in a remote repository\n" ++
+                               "unpack      <file>            Unpack a pack file into a bare repository.\n" ++
+                               "read-index  <file>            Read a `.git/index` file and show the index entries."
 
 -- | Execute the given command
 run :: String -> [String] -> IO ()
